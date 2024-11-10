@@ -1,0 +1,5 @@
+name: Digger
+version: '${project.version}'
+main: net.hotamachi.digger.Digger
+api-version: '1.20'
+load: STARTUP
