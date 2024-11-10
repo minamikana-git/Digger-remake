@@ -1,4 +1,4 @@
-package net.hotamachi.digger.enchant;
+package net.hotamachisubaru.digger.enchant;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -15,7 +15,7 @@ public class EnchantManager {
         }
 
         if (tool.getType().toString().endsWith("_PICKAXE") && !hasAppropriateEnchant(tool, blocksMined)) {
-            Enchantment enchantment = Enchantment.EFFICIENCY;
+            Enchantment enchantment = Enchantment.DIG_SPEED;
 
             int enchantLevel = getEnchantLevelForBlocksMined(blocksMined);
 
@@ -31,7 +31,7 @@ public class EnchantManager {
 
     private boolean hasAppropriateEnchant(ItemStack tool, int blocksMined) {
         int expectedLevel = getEnchantLevelForBlocksMined(blocksMined);
-        return tool.getEnchantmentLevel(Enchantment.EFFICIENCY) >= expectedLevel;
+        return tool.getEnchantmentLevel(Enchantment.DIG_SPEED) >= expectedLevel;
     }
 
     private int getEnchantLevelForBlocksMined(int blocksMined) {

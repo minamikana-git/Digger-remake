@@ -1,5 +1,8 @@
-package org.hotal.digger;
+package net.hotamachisubaru.digger;
 
+import net.hotamachisubaru.digger.enchant.EnchantManager;
+import net.hotamachisubaru.digger.mysql.MySQLDatabase;
+import net.hotamachisubaru.digger.sqlite.SQLiteDatabase;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.*;
 import org.bukkit.command.Command;
@@ -20,31 +23,28 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
-import org.hotal.digger.ench.EnchantManager;
-import org.hotal.digger.mysql.MySQLDatabase;
-import org.hotal.digger.sql.PointsDatabase;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
-import java.sql.*;
-import java.io.File;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Properties;
-import static java.sql.DriverManager.getConnection;
 
 public class Digger extends JavaPlugin implements Listener {
 
-    private Map<Location, UUID> placedBlocksWithUUID = new HashMap<>();
+    private final Map<Location, UUID> placedBlocksWithUUID = new HashMap<>();
 
 
     private MySQLDatabase mySQLDatabase;
-    private PointsDatabase pointsDatabase;
+    private SQLiteDatabase sqLiteDatabase = new SQLiteDatabase();
     private FileConfiguration dataConfig;
     private File dataFile;
 
-    private EnchantManager enchantManager = new EnchantManager();
+    private final EnchantManager enchantManager = new EnchantManager();
 
     public boolean isToolRewardEnabled = true;
 
@@ -132,14 +132,12 @@ public class Digger extends JavaPlugin implements Listener {
         }
 
         // PointsDatabase の初期化
-        pointsDatabase = new PointsDatabase();
+
         try {
-            pointsDatabase.openConnection(getDataFolder().getAbsolutePath());
+            sqLiteDatabase.openConnection(getDataFolder().getAbsolutePath());
         } catch (SQLException e) {
             getLogger().severe("SQLiteデータベースの初期化に失敗しました: " + e.getMessage());
         }
-
-
 
 
         Digger.rewardProbability = this.getConfig().getDouble("rewardProbability", 0.02); //2%
@@ -182,12 +180,12 @@ public class Digger extends JavaPlugin implements Listener {
         rewardMap.put(Material.WOODEN_PICKAXE, 50);
         rewardMap.put(Material.WOODEN_SHOVEL, 50);
         FileConfiguration dataConfig;
-        dataFile = new File(getDataFolder(),"config.properties");
+        dataFile = new File(getDataFolder(), "config.properties");
         dataFile = new File(getDataFolder(), "player-data.yml");
         if (!dataFile.exists()) {
             dataFile.getParentFile().mkdirs();
             saveResource("player-data.yml", false);
-            saveResource("config.properties",false);
+            saveResource("config.properties", false);
         }
         dataConfig = YamlConfiguration.loadConfiguration(dataFile);
         configFile = new File(getDataFolder(), "config.yml");
@@ -216,8 +214,6 @@ public class Digger extends JavaPlugin implements Listener {
         this.getServer().getPluginManager().registerEvents(this, this);
 
 
-
-
     }
 
 
@@ -237,7 +233,7 @@ public class Digger extends JavaPlugin implements Listener {
 
         // データを保存する
         try {
-            pointsDatabase.saveData(playerDataMap, placedBlocks); // playerDataMapを使用
+            sqLiteDatabase.saveData(playerDataMap, placedBlocks); // playerDataMapを使用
         } catch (SQLException e) {
             // エラーハンドリング
             getLogger().severe("データベースへの保存中にエラーが発生しました。YAMLファイルに変更しています: " + e.getMessage());
@@ -295,11 +291,10 @@ public class Digger extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player)) {
+        if (!(sender instanceof Player player)) {
             sender.sendMessage("§cこのコマンドはプレイヤーからのみ実行できます。");
             return true;
         }
-        Player player = (Player) sender;
 
         if (cmd.getName().equalsIgnoreCase("reload")) {
             if (cmd.getName().equalsIgnoreCase("reload")) {
@@ -317,7 +312,8 @@ public class Digger extends JavaPlugin implements Listener {
         }
         return false;
     }
-    public void updateScoreboard (Player viewingPlayer){
+
+    public void updateScoreboard(Player viewingPlayer) {
 
         Boolean showScoreboard = scoreboardToggles.getOrDefault(viewingPlayer.getUniqueId(), true);
         if (showScoreboard) {
@@ -326,7 +322,6 @@ public class Digger extends JavaPlugin implements Listener {
             Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
             Objective objective = scoreboard.registerNewObjective("stats", "dummy", ChatColor.GREEN + "整地の順位");
             objective.setDisplaySlot(DisplaySlot.SIDEBAR);
-
 
 
 // ソートされたリストを取得
@@ -338,8 +333,6 @@ public class Digger extends JavaPlugin implements Listener {
 
             // 空行
             objective.getScore(" ").setScore(1);
-
-
 
 
             // プレイヤーのランクを決定
@@ -393,8 +386,6 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
 
-
-
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
@@ -418,7 +409,7 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event)  {
+    public void onPlayerQuit(PlayerQuitEvent event) {
         saveData();
     }
 
@@ -437,8 +428,6 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
 
-
-
     private void giveReward(Player player) {
         Material toolType = player.getInventory().getItemInMainHand().getType();
         Integer toolReward = isToolRewardEnabled ? rewardMap.getOrDefault(toolType, 50) : 50;
@@ -455,7 +444,7 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
 
-    public void updateAllPlayersScoreboard () {
+    public void updateAllPlayersScoreboard() {
         // すべてのプレイヤー（オンライン・オフライン）のUUIDを使用してスコアボードを更新
         for (Player player : Bukkit.getOnlinePlayers()) {
             updateScoreboard(player);
@@ -496,8 +485,8 @@ public class Digger extends JavaPlugin implements Listener {
         // SQLiteデータベースから読み込む
         try {
             // データベース接続の確認とデータの取得
-            if (pointsDatabase.checkConnection()) {
-                Map<UUID, PlayerData> dataFromDatabase = pointsDatabase.getData();
+            if (SQLiteDatabase.checkConnection()) {
+                Map<UUID, PlayerData> dataFromDatabase = SQLiteDatabase.getData();
                 if (dataFromDatabase != null) {
                     blockCount.clear();
                     blockCount.putAll(dataFromDatabase);
@@ -532,8 +521,6 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
 
-
-
     private Location stringToLocation(String s) {
         String[] parts = s.split(",");
         World world = Bukkit.getWorld(parts[0]);
@@ -551,7 +538,7 @@ public class Digger extends JavaPlugin implements Listener {
             UUID playerId = entry.getValue();
 
             // ここでデータベース保存処理を行う
-            mySQLDatabase.savePlacedBlock(playerId,loc);
+            mySQLDatabase.savePlacedBlock(playerId, loc);
         }
     }
 
@@ -594,7 +581,7 @@ public class Digger extends JavaPlugin implements Listener {
 
     private boolean saveToSQLite() {
         try {
-            pointsDatabase.saveData(blockCount, placedBlocks);
+           SQLiteDatabase.saveData(blockCount, placedBlocks);
             getLogger().info("データをSQLiteデータベースに保存しました。");
             return true;
         } catch (SQLException e) {
@@ -610,7 +597,7 @@ public class Digger extends JavaPlugin implements Listener {
                 UUID uuid = entry.getKey();
                 PlayerData playerData = entry.getValue();
                 dataConfig.set("blockCount." + uuid.toString() + ".blocksMined", playerData.getBlocksMined());
-                dataConfig.set("blockCount." + uuid.toString() + ".playerName", playerData.getPlayerName());
+                dataConfig.set("blockCount." + uuid + ".playerName", playerData.getPlayerName());
             }
 
             // placedBlocks の保存
@@ -624,11 +611,6 @@ public class Digger extends JavaPlugin implements Listener {
             getLogger().info("データをYAMLファイルに保存しました。");
         }
     }
-
-
-
-
-
 
 
     private String locationToString(Location loc) {
@@ -665,7 +647,6 @@ public class Digger extends JavaPlugin implements Listener {
             return null;
         }
     }
-
 
 
     public void setConnection(Connection connection) {

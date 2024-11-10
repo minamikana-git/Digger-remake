@@ -1,4 +1,4 @@
-package net.hotamachi.digger;
+package net.hotamachisubaru.digger;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -8,7 +8,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
-import net.hotamachisubaru.digger.Digger;
+
 
 import java.util.Map;
 import java.util.UUID;

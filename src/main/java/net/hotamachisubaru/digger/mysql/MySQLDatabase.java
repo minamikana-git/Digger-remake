@@ -1,4 +1,4 @@
-package net.hotamachi.digger.mysql;
+package net.hotamachisubaru.digger.mysql;
 import net.hotamachisubaru.digger.Digger;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;

@@ -1,4 +1,4 @@
-package net.hotamachi.digger;
+package net.hotamachisubaru.digger;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -15,7 +15,7 @@ public class Commands implements CommandExecutor {
     private final Map<UUID, Integer> blockCount;
 
     // コンストラクタ
-    public Commands(JavaPlugin plugin, Map<UUID, Integer> blockCount) {
+    public Commands(JavaPlugin plugin, ToolMoney blockCount) {
         this.plugin = plugin;
         this.blockCount = blockCount;
     }

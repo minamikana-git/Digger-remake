@@ -1,4 +1,4 @@
-package net.hotamachi.digger.sqlite;
+package net.hotamachisubaru.digger.sqlite;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import net.hotamachisubaru.digger.Digger;
@@ -36,7 +36,7 @@ public class SQLiteDatabase{
     }
 
     // データベースからデータを取得するメソッド
-    public Map<UUID, Digger.PlayerData> getData() throws SQLException {
+    public static Map<UUID, Digger.PlayerData> getData() throws SQLException {
         Map<UUID, Digger.PlayerData> data = new HashMap<>();
         String query = "SELECT * FROM player_data"; // データベースのテーブル名を適宜変更してください
 
@@ -77,7 +77,7 @@ public class SQLiteDatabase{
         return loadedData;
     }
 
-    public void saveData(Map<UUID, Digger.PlayerData> blockCount, Iterable<Location> placedBlocks) throws SQLException {
+    public static void saveData(Map<UUID, Digger.PlayerData> blockCount, Iterable<Location> placedBlocks) throws SQLException {
         // blockCount の保存
         saveBlockCount(blockCount);
 
@@ -117,7 +117,7 @@ public class SQLiteDatabase{
             }
         }
     }
-    public boolean checkConnection() throws SQLException {
+    public static boolean checkConnection() throws SQLException {
         // connection はデータベースへの接続オブジェクトです
         return connection != null && !connection.isClosed();
     }

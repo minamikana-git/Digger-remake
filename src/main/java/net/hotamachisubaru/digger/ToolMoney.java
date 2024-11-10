@@ -1,4 +1,4 @@
-package net.hotamachi.digger;
+package net.hotamachisubaru.digger;
 
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
