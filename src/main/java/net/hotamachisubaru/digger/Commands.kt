@@ -1,78 +1,68 @@
-package net.hotamachisubaru.digger;
+package net.hotamachisubaru.digger
 
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.Bukkit
+import org.bukkit.command.Command
+import org.bukkit.command.CommandExecutor
+import org.bukkit.command.CommandSender
+import org.bukkit.entity.Player
+import org.bukkit.plugin.java.JavaPlugin
+import java.util.*
 
-import java.util.Map;
-import java.util.UUID;
-
-public class Commands implements CommandExecutor {
-    private final JavaPlugin plugin;
-    private final Map<UUID, Integer> blockCount;
-
-    public Commands(JavaPlugin plugin, Map<UUID, Integer> blockCount) {
-        this.plugin = plugin;
-        this.blockCount = blockCount;
-    }
-
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("§cこのコマンドはプレイヤーからのみ実行できます。");
-            return true;
+class Commands(private val plugin: JavaPlugin, private val blockCount: MutableMap<UUID, Int>) : CommandExecutor {
+    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<String>): Boolean {
+        if (sender !is Player) {
+            sender.sendMessage("§cこのコマンドはプレイヤーからのみ実行できます。")
+            return true
         }
 
-        switch (command.getName().toLowerCase()) {
-            case "reload" -> {
-                return handleReloadCommand(player);
+        return when (command.name.lowercase(Locale.getDefault())) {
+            "reload" -> {
+                handleReloadCommand(sender)
             }
-            case "set" -> {
-                return handleSetCommand(player, args);
+
+            "set" -> {
+                handleSetCommand(sender, args)
             }
-            default -> {
-                return false;
+
+            else -> {
+                false
             }
         }
     }
 
-    private boolean handleReloadCommand(Player player) {
+    private fun handleReloadCommand(player: Player): Boolean {
         if (!player.hasPermission("digger.reload")) {
-            player.sendMessage("§cあなたにはこのコマンドを実行する権限がありません。");
-            return true;
+            player.sendMessage("§cあなたにはこのコマンドを実行する権限がありません。")
+            return true
         }
 
-        plugin.reloadConfig();
-        player.sendMessage("§aconfig.ymlを再読み込みしました。");
-        return true;
+        plugin.reloadConfig()
+        player.sendMessage("§aconfig.ymlを再読み込みしました。")
+        return true
     }
 
-    private boolean handleSetCommand(Player player, String[] args) {
+    private fun handleSetCommand(player: Player, args: Array<String>): Boolean {
         if (!player.hasPermission("digger.set")) {
-            player.sendMessage("§cあなたにはこのコマンドを実行する権限がありません。");
-            return true;
+            player.sendMessage("§cあなたにはこのコマンドを実行する権限がありません。")
+            return true
         }
 
-        if (args.length != 2) {
-            player.sendMessage("§c使用法: /set <プレイヤー名> <スコア>");
-            return true;
+        if (args.size != 2) {
+            player.sendMessage("§c使用法: /set <プレイヤー名> <スコア>")
+            return true
         }
 
-        String playerName = args[0];
+        val playerName = args[0]
         try {
-            int newScore = Integer.parseInt(args[1]);
-            OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(playerName);
-            UUID targetUUID = targetPlayer.getUniqueId();
+            val newScore = args[1].toInt()
+            val targetPlayer = Bukkit.getOfflinePlayer(playerName)
+            val targetUUID = targetPlayer.uniqueId
 
-            blockCount.put(targetUUID, newScore);
-            player.sendMessage("§a" + playerName + "のスコアを" + newScore + "に設定しました。");
-        } catch (NumberFormatException e) {
-            player.sendMessage("§c無効なスコアです。数字を入力してください。");
+            blockCount[targetUUID] = newScore
+            player.sendMessage("§a" + playerName + "のスコアを" + newScore + "に設定しました。")
+        } catch (e: NumberFormatException) {
+            player.sendMessage("§c無効なスコアです。数字を入力してください。")
         }
-        return true;
+        return true
     }
 }
