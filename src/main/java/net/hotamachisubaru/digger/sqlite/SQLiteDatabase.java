@@ -1,4 +1,5 @@
 package net.hotamachisubaru.digger.sqlite;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import net.hotamachisubaru.digger.Digger;
@@ -8,16 +9,23 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public class SQLiteDatabase{
+public class SQLiteDatabase {
     private Connection connection;
 
+    // データベース接続を開くメソッド
     public void openConnection(String path) throws SQLException {
-        // データベース接続の確立
+        // SQLiteデータベースに接続
         String url = "jdbc:sqlite:" + path + "/Database.db";
         connection = DriverManager.getConnection(url);
 
         // テーブルの作成
+        createTables();
+    }
+
+    // テーブルの作成
+    private void createTables() throws SQLException {
         try (Statement statement = connection.createStatement()) {
+            // player_data テーブルの作成
             String playerDataTableCreationQuery = "CREATE TABLE IF NOT EXISTS player_data ("
                     + "UUID VARCHAR(255) NOT NULL,"
                     + "PlayerName VARCHAR(255),"
@@ -25,8 +33,9 @@ public class SQLiteDatabase{
                     + "PRIMARY KEY (UUID));";
             statement.execute(playerDataTableCreationQuery);
 
+            // placed_blocks テーブルの作成
             String placedBlocksTableCreationQuery = "CREATE TABLE IF NOT EXISTS placed_blocks ("
-                    + "UUID INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + "World VARCHAR(255),"
                     + "X INT,"
                     + "Y INT,"
@@ -36,17 +45,20 @@ public class SQLiteDatabase{
     }
 
     // データベースからデータを取得するメソッド
-    public static Map<UUID, Digger.PlayerData> getData() throws SQLException {
+    public Map<UUID, Digger.PlayerData> getData() throws SQLException {
+        if (!checkConnection()) {
+            throw new SQLException("データベース接続が確立されていません。");
+        }
+
         Map<UUID, Digger.PlayerData> data = new HashMap<>();
-        String query = "SELECT * FROM player_data"; // データベースのテーブル名を適宜変更してください
+        String query = "SELECT * FROM player_data;";
 
         try (PreparedStatement stmt = connection.prepareStatement(query);
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
                 // データベースからUUIDとブロックの採掘数を取得
-                String uuidString = rs.getString("UUID");
-                UUID uuid = UUID.fromString(uuidString);
+                UUID uuid = UUID.fromString(rs.getString("UUID"));
                 String playerName = rs.getString("PlayerName");
                 int blocksMined = rs.getInt("BlocksMined");
 
@@ -59,37 +71,23 @@ public class SQLiteDatabase{
         return data;
     }
 
+    // データをロードするメソッド
     public Map<UUID, Digger.PlayerData> loadData() throws SQLException {
-        Map<UUID, Digger.PlayerData> loadedData = new HashMap<>();
-        // SQLクエリを実行し、結果を取得
-        String query = "SELECT * FROM player_data;";
-        try (Statement stmt = this.connection.createStatement();
-             ResultSet results = stmt.executeQuery(query)) {
-
-            while (results.next()) {
-                UUID uuid = UUID.fromString(results.getString("UUID"));
-                String playerName = results.getString("PlayerName");
-                int blocksMined = results.getInt("BlocksMined");
-
-                loadedData.put(uuid, new Digger.PlayerData(playerName, blocksMined));
-            }
-        }
-        return loadedData;
+        return getData();
     }
 
-    public static void saveData(Map<UUID, Digger.PlayerData> blockCount, Iterable<Location> placedBlocks) throws SQLException {
-        // blockCount の保存
+    // データを保存するメソッド
+    public void saveData(Map<UUID, Digger.PlayerData> blockCount, Iterable<Location> placedBlocks) throws SQLException {
+        if (!checkConnection()) {
+            throw new SQLException("データベース接続が確立されていません。");
+        }
+
         saveBlockCount(blockCount);
-
-
-        // placedBlocks の保存
         savePlacedBlocks(placedBlocks);
     }
 
+    // ブロックカウントデータを保存
     private void saveBlockCount(Map<UUID, Digger.PlayerData> blockCount) throws SQLException {
-        for (Map.Entry<UUID, Digger.PlayerData> entry : blockCount.entrySet()) {
-            Bukkit.getLogger().info("UUIDのPlayerDataをセーブしています: " + entry.getKey() + ", PlayerName: " + entry.getValue().getPlayerName());
-        }
         String blockCountQuery = "INSERT INTO player_data (UUID, BlocksMined, PlayerName) VALUES (?, ?, ?) "
                 + "ON CONFLICT(UUID) DO UPDATE SET BlocksMined = excluded.BlocksMined, PlayerName = excluded.PlayerName;";
 
@@ -97,13 +95,13 @@ public class SQLiteDatabase{
             for (Map.Entry<UUID, Digger.PlayerData> entry : blockCount.entrySet()) {
                 pstmt.setString(1, entry.getKey().toString());
                 pstmt.setInt(2, entry.getValue().getBlocksMined());
-                pstmt.setString(3, entry.getValue().getPlayerName()); // PlayerNameの設定
+                pstmt.setString(3, entry.getValue().getPlayerName());
                 pstmt.executeUpdate();
             }
         }
     }
 
-
+    // 配置されたブロックデータを保存
     private void savePlacedBlocks(Iterable<Location> placedBlocks) throws SQLException {
         String placedBlocksQuery = "INSERT INTO placed_blocks (World, X, Y, Z) VALUES (?, ?, ?, ?);";
 
@@ -117,14 +115,26 @@ public class SQLiteDatabase{
             }
         }
     }
-    public static boolean checkConnection() throws SQLException {
-        // connection はデータベースへの接続オブジェクトです
+
+    // データベース接続がアクティブかどうかをチェック
+    public boolean checkConnection() throws SQLException {
         return connection != null && !connection.isClosed();
     }
 
+    // データベース接続を閉じるメソッド
     public void closeConnection() throws SQLException {
         if (connection != null && !connection.isClosed()) {
             connection.close();
         }
+    }
+
+    // シングルトンインスタンスの取得メソッド
+    private static SQLiteDatabase instance;
+
+    public static SQLiteDatabase getInstance() {
+        if (instance == null) {
+            instance = new SQLiteDatabase();
+        }
+        return instance;
     }
 }

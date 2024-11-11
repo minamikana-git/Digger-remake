@@ -39,24 +39,24 @@ public class Digger extends JavaPlugin implements Listener {
 
     private final Map<Location, UUID> placedBlocksWithUUID = new HashMap<>();
     private MySQLDatabase mySQLDatabase;
-    private SQLiteDatabase sqLiteDatabase = new SQLiteDatabase();
+    private final SQLiteDatabase sqLiteDatabase = new SQLiteDatabase();
     private FileConfiguration dataConfig;
     private File dataFile;
     private final EnchantManager enchantManager = new EnchantManager();
     private boolean useToolMoney;
-    private final Map<UUID, Boolean> scoreboardToggles = new HashMap<>();
+    public final Map<UUID, Boolean> scoreboardToggles = new HashMap<>();
     private static Digger instance;
     private Boolean currentSetting = null;
     public static double rewardProbability = 0.02;
     public ToolMoney toolMoney = new ToolMoney(getConfig(), this);
     private Scoreboard scoreboard;
     private Economy economy;
-    private long scoreboardUpdateInterval = 20L;
+    private final long scoreboardUpdateInterval = 20L;
     private Objective objective;
     private final Map<Material, Integer> rewardMap = new HashMap<>();
     public final Map<UUID, PlayerData> blockCount = new HashMap<>();
     private final List<Location> placedBlocks = new ArrayList<>();
-    private List<String> worldBlacklist = new ArrayList<>();
+    private final List<String> worldBlacklist = new ArrayList<>();
     private Material toolType;
     private Connection connection;
     private String url;
@@ -81,7 +81,6 @@ public class Digger extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         getLogger().info("[ほたまち]整地プラグインを起動しています。データのロード中です。");
-
         saveDefaultConfig();
         setupDatabase();
         setupCommands();
@@ -99,22 +98,22 @@ public class Digger extends JavaPlugin implements Listener {
 
     private void setupCommands() {
         ToolMoney toolMoneyInstance = new ToolMoney(getConfig(), this);
-        Commands commandExecutor = new Commands(this, toolMoneyInstance);
+        Commands commandExecutor = new Commands(this, (Map<UUID, Integer>) toolMoneyInstance);
         getCommand("reload").setExecutor(commandExecutor);
         getCommand("set").setExecutor(commandExecutor);
-        getLogger().info("コマンドが正常に登録されました。");
+
     }
 
     private void setupScoreboard() {
         scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
         objective = scoreboard.registerNewObjective("整地の順位", "dummy", ChatColor.GREEN + "あなたの順位");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
-        getLogger().info("スコアボードが正常に設定されました。");
+
     }
 
     private void registerEvents() {
         getServer().getPluginManager().registerEvents(this, this);
-        getLogger().info("イベントリスナーが正常に登録されました。");
+
     }
 
     private void initializeMySQLDatabase() {
@@ -320,8 +319,8 @@ public class Digger extends JavaPlugin implements Listener {
             getLogger().warning("MySQLデータベースからの読み込みに失敗しました: " + e.getMessage());
         }
         try {
-            if (SQLiteDatabase.checkConnection()) {
-                Map<UUID, PlayerData> dataFromDatabase = SQLiteDatabase.getData();
+            if (sqLiteDatabase.checkConnection()) {
+                Map<UUID, PlayerData> dataFromDatabase = sqLiteDatabase.getData();
                 if (dataFromDatabase != null) {
                     blockCount.clear();
                     blockCount.putAll(dataFromDatabase);
@@ -334,6 +333,7 @@ public class Digger extends JavaPlugin implements Listener {
         }
         loadFromYAML();
     }
+
 
     private void loadFromYAML() {
         dataFile = new File(getDataFolder(), "player-data.yml");
@@ -380,7 +380,7 @@ public class Digger extends JavaPlugin implements Listener {
 
     private boolean saveToSQLite() {
         try {
-            SQLiteDatabase.saveData(blockCount, placedBlocks);
+            sqLiteDatabase.saveData(blockCount, placedBlocks);
             getLogger().info("データをSQLiteデータベースに保存しました。");
             return true;
         } catch (SQLException e) {
@@ -388,6 +388,7 @@ public class Digger extends JavaPlugin implements Listener {
             return false;
         }
     }
+
 
     private void saveToYAML() {
         if (dataConfig != null) {

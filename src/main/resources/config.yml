@@ -1,0 +1,69 @@
+block-blacklist:
+  - "KELP"
+  - "KELP_PLANT"
+  - "GRASS"
+  - "SEAGRASS"
+  - "TALL_SEAGRASS"
+  - "DANDELION"
+  - "POPPY"
+  - "BLUE_ORCHID"
+  - "ALLIUM"
+  - "AZURE_BLUET"
+  - "RED_TULIP"
+  - "ORANGE_TULIP"
+  - "WHITE_TULIP"
+  - "PINK_TULIP"
+  - "OXEYE_DAISY"
+  - "CORNFLOWER"
+  - "LILY_OF_THE_VALLEY"
+  - "TORCHFLOWER"
+  - "PINK_PETALS"
+  - "SPORE_BLOSSOM"
+  - "ROSE_BUSH"
+  - "GRASS"
+  - "SAND"
+  - "FIRE"
+  - "SUGAR_CANE"
+  - "COAL_ORE"
+  - "IRON_ORE"
+  - "COPPER_ORE"
+  - "GOLD_ORE"
+  - "REDSTONE_ORE"
+  - "EMERALD_ORE"
+  - "LAPIS_ORE"
+  - "DIAMOND_ORE"
+  - "DEEPSLATE_COPPER_ORE"
+  - "DEEPSLATE_GOLD_ORE"
+  - "DEEPSLATE_REDSTONE_ORE"
+  - "DEEPSLATE_EMERALD_ORE"
+  - "DEEPSLATE_LAPIS_ORE"
+  - "DEEPSLATE_DIAMOND_ORE"
+  - "OAK_LOG"
+  - "SPRUCE_LOG"
+  - "BIRCH_LOG"
+  - "JUNGLE_LOG"
+  - "ACACIA_LOG"
+  - "DARK_OAK_LOG"
+  - "OBSIDIAN"
+  - "TALL_GRASS"
+
+update-interval: 20
+world-blacklist:
+  - world_nether
+  - world_the_end
+
+rewardProbability: 0.02
+use-tool-money: false
+tools:
+  NETHERITE_PICKAXE: 250
+  NETHERITE_SHOVEL: 250
+  DIAMOND_PICKAXE: 200
+  DIAMOND_SHOVEL: 200
+  GOLDEN_PICKAXE: 175
+  GOLDEN_SHOVEL: 175
+  IRON_PICKAXE: 150
+  IRON_SHOVEL: 150
+  STONE_PICKAXE: 100
+  STONE_SHOVEL: 100
+  WOODEN_PICKAXE: 50
+  WOODEN_SHOVEL: 50

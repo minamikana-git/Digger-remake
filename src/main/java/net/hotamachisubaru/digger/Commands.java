@@ -1,4 +1,5 @@
 package net.hotamachisubaru.digger;
+
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -14,35 +15,31 @@ public class Commands implements CommandExecutor {
     private final JavaPlugin plugin;
     private final Map<UUID, Integer> blockCount;
 
-    // コンストラクタ
-    public Commands(JavaPlugin plugin, ToolMoney blockCount) {
+    public Commands(JavaPlugin plugin, Map<UUID, Integer> blockCount) {
         this.plugin = plugin;
         this.blockCount = blockCount;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) {
+        if (!(sender instanceof Player player)) {
             sender.sendMessage("§cこのコマンドはプレイヤーからのみ実行できます。");
             return true;
         }
 
-        Player player = (Player) sender;
-        String cmdName = command.getName().toLowerCase();
-
-        switch (cmdName) {
-            case "reload":
+        switch (command.getName().toLowerCase()) {
+            case "reload" -> {
                 return handleReloadCommand(player);
-
-            case "set":
+            }
+            case "set" -> {
                 return handleSetCommand(player, args);
-
-            default:
+            }
+            default -> {
                 return false;
+            }
         }
     }
 
-    // リロードコマンド処理
     private boolean handleReloadCommand(Player player) {
         if (!player.hasPermission("digger.reload")) {
             player.sendMessage("§cあなたにはこのコマンドを実行する権限がありません。");
@@ -54,7 +51,6 @@ public class Commands implements CommandExecutor {
         return true;
     }
 
-    // スコア設定コマンド処理
     private boolean handleSetCommand(Player player, String[] args) {
         if (!player.hasPermission("digger.set")) {
             player.sendMessage("§cあなたにはこのコマンドを実行する権限がありません。");
@@ -72,7 +68,6 @@ public class Commands implements CommandExecutor {
             OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(playerName);
             UUID targetUUID = targetPlayer.getUniqueId();
 
-            // スコアを設定
             blockCount.put(targetUUID, newScore);
             player.sendMessage("§a" + playerName + "のスコアを" + newScore + "に設定しました。");
         } catch (NumberFormatException e) {

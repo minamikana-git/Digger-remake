@@ -9,20 +9,19 @@ import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 
-
 import java.util.Map;
 import java.util.UUID;
 
 public class CoordinatesDisplay {
-    private Digger plugin;
-    private Map<UUID, Integer> blockCount;
+    private final Digger plugin;
+    private final Map<UUID, Integer> blockCount;
 
     public CoordinatesDisplay(Digger plugin, Map<UUID, Integer> blockCount) {
         this.plugin = plugin;
         this.blockCount = blockCount;
     }
 
-    public void updateScoreboard(Player player) {
+    private void updateCoordinatesScoreboard(Player player) {
         Scoreboard scoreboard = player.getScoreboard();
         Objective objective = scoreboard.getObjective("showCoords");
 
@@ -31,35 +30,29 @@ public class CoordinatesDisplay {
             objective.setDisplaySlot(DisplaySlot.SIDEBAR);
         }
 
-        // 座標を表示
         Location location = player.getLocation();
-        int x = location.getBlockX();
-        int y = location.getBlockY();
-        int z = location.getBlockZ();
-
-        objective.getScore(ChatColor.WHITE + "X: " + ChatColor.RED + x).setScore(3);
-        objective.getScore(ChatColor.WHITE + "Y: " + ChatColor.RED + y).setScore(2);
-        objective.getScore(ChatColor.WHITE + "Z: " + ChatColor.RED + z).setScore(1);
+        objective.getScore(ChatColor.WHITE + "X: " + ChatColor.RED + location.getBlockX()).setScore(3);
+        objective.getScore(ChatColor.WHITE + "Y: " + ChatColor.RED + location.getBlockY()).setScore(2);
+        objective.getScore(ChatColor.WHITE + "Z: " + ChatColor.RED + location.getBlockZ()).setScore(1);
 
         player.setScoreboard(scoreboard);
     }
 
-    public void updateDiggingRankScoreboard(UUID viewingPlayerUUID, Player viewingPlayer) {
+    private void updateDiggingRankScoreboard(Player player) {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
         Objective objective = scoreboard.registerNewObjective("diggingRank", "dummy", ChatColor.AQUA + "整地の順位");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
-
-        viewingPlayer.setScoreboard(scoreboard);
+        player.setScoreboard(scoreboard);
     }
 
-    public void showCoordinates() {
+    public void startCoordinateUpdates() {
         new BukkitRunnable() {
             @Override
             public void run() {
                 for (Player player : Bukkit.getOnlinePlayers()) {
-                    updateScoreboard(player);
+                    updateCoordinatesScoreboard(player);
                 }
             }
-        }.runTaskTimer(plugin, 0L, 20L); // 20ティックごとに更新
+        }.runTaskTimer(plugin, 0L, 20L);
     }
 }
