@@ -7,7 +7,6 @@ import net.milkbowl.vault.economy.Economy;
 import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -17,7 +16,6 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -30,10 +28,8 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Digger extends JavaPlugin implements Listener {
 
@@ -48,7 +44,7 @@ public class Digger extends JavaPlugin implements Listener {
     private static Digger instance;
     private Boolean currentSetting = null;
     public static double rewardProbability = 0.02;
-    public ToolMoney toolMoney = new ToolMoney(getConfig(), this);
+    public ToolMoney toolMoney;
     private Scoreboard scoreboard;
     private Economy economy;
     private final long scoreboardUpdateInterval = 20L;
@@ -82,6 +78,7 @@ public class Digger extends JavaPlugin implements Listener {
     public void onEnable() {
         getLogger().info("[ほたまち]整地プラグインを起動しています。データのロード中です。");
         saveDefaultConfig();
+        toolMoney = new ToolMoney(getConfig(), this); // ToolMoneyインスタンスの初期化
         setupDatabase();
         setupCommands();
         setupScoreboard();
@@ -97,23 +94,20 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
     private void setupCommands() {
-        ToolMoney toolMoneyInstance = new ToolMoney(getConfig(), this);
-        Commands commandExecutor = new Commands(this, (Map<UUID, Integer>) toolMoneyInstance);
+        Commands commandExecutor = new Commands(this, toolMoney);
         getCommand("reload").setExecutor(commandExecutor);
         getCommand("set").setExecutor(commandExecutor);
-
     }
+
 
     private void setupScoreboard() {
         scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
         objective = scoreboard.registerNewObjective("整地の順位", "dummy", ChatColor.GREEN + "あなたの順位");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
-
     }
 
     private void registerEvents() {
         getServer().getPluginManager().registerEvents(this, this);
-
     }
 
     private void initializeMySQLDatabase() {
