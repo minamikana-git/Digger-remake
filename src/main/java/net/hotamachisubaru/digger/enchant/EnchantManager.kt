@@ -27,6 +27,7 @@ class EnchantManager {
     private fun isToolValidForEnchantment(tool: ItemStack?): Boolean {
         // ツールが存在しており、空気ではなく、かつピッケル（PICKAXE）であれば有効とする
         return tool != null && tool.type != Material.AIR && tool.type.toString().endsWith("_PICKAXE")
+        return tool != null && tool.type != Material.AIR && tool.type.toString().endsWith("_SHOVEL")
     }
 
     // ツールにブロック数に応じた適切なエンチャントがすでに付いているかどうかを確認する関数
