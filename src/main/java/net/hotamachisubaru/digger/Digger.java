@@ -88,11 +88,21 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
     private void setupDatabase() {
-        loadPropertiesConfig();
-        initializeMySQLDatabase();
-        initializeSQLiteDatabase();
+        String dbType = getConfig().getString("database.type", "yaml").toLowerCase();
+        switch (dbType) {
+            case "mysql":
+                initializeMySQLDatabase();
+                break;
+            case "sqlite":
+                initializeSQLiteDatabase();
+                break;
+            case "yaml":
+            default:
+                // YAMLの場合、特別な初期化は不要
+                getLogger().info("YAMLファイルを使用してデータを保存します。");
+                break;
+        }
     }
-
     private void setupCommands() {
         Commands commandExecutor = new Commands(this, toolMoney);
         getCommand("reload").setExecutor(commandExecutor);
@@ -121,7 +131,6 @@ public class Digger extends JavaPlugin implements Listener {
 
             if (!mySQLDatabase.connect()) {
                 getLogger().severe("MySQLデータベースへの接続に失敗しました。");
-                getServer().getPluginManager().disablePlugin(this);
             } else {
                 getLogger().info("MySQLデータベースに正常に接続しました。");
             }
@@ -301,32 +310,60 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
     public void loadData() {
-        try {
-            Map<UUID, PlayerData> dataFromDatabase = mySQLDatabase.loadData();
-            if (!dataFromDatabase.isEmpty()) {
-                blockCount.clear();
-                blockCount.putAll(dataFromDatabase);
-                getLogger().info("データがMySQLデータベースから読み込まれました。");
-                return;
-            }
-        } catch (Exception e) {
-            getLogger().warning("MySQLデータベースからの読み込みに失敗しました: " + e.getMessage());
+        String dbType = getConfig().getString("database.type", "yaml").toLowerCase();
+        switch (dbType) {
+            case "mysql":
+                loadFromMySQL();
+                break;
+            case "sqlite":
+                loadFromSQLite();
+                break;
+            case "yaml":
+            default:
+                loadFromYAML();
+                break;
         }
+    }
+
+    private void loadFromSQLite() {
         try {
             if (sqLiteDatabase.checkConnection()) {
                 Map<UUID, PlayerData> dataFromDatabase = sqLiteDatabase.getData();
                 if (dataFromDatabase != null) {
                     blockCount.clear();
                     blockCount.putAll(dataFromDatabase);
-                    getLogger().info("データがデータベースから読み込まれました。");
-                    return;
+                    getLogger().info("データがSQLiteデータベースから読み込まれました。");
+                } else {
+                    getLogger().warning("SQLiteデータベースからのデータが空です。");
                 }
+            } else {
+                getLogger().warning("SQLiteデータベースへの接続が確立されていません。");
             }
         } catch (SQLException e) {
-            getLogger().severe("データベースからの読み込み中にエラーが発生しました: " + e.getMessage());
+            getLogger().severe("SQLiteデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
         }
-        loadFromYAML();
     }
+
+
+    private void loadFromMySQL() {
+        try {
+            if (mySQLDatabase.isConnected()) {
+                Map<UUID, PlayerData> dataFromDatabase = mySQLDatabase.loadData();
+                if (dataFromDatabase != null && !dataFromDatabase.isEmpty()) {
+                    blockCount.clear();
+                    blockCount.putAll(dataFromDatabase);
+                    getLogger().info("データがMySQLデータベースから読み込まれました。");
+                } else {
+                    getLogger().warning("MySQLデータベースからのデータが空です。");
+                }
+            } else {
+                getLogger().warning("MySQLデータベースへの接続が確立されていません。");
+            }
+        } catch (Exception e) {
+            getLogger().severe("MySQLデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
+        }
+    }
+
 
 
     private void loadFromYAML() {
@@ -350,15 +387,20 @@ public class Digger extends JavaPlugin implements Listener {
     }
 
     public void saveData() {
-        boolean mysqlSaved = saveToMySQL();
-        if (!mysqlSaved) {
-            boolean sqliteSaved = saveToSQLite();
-            if (!sqliteSaved) {
+        String dbType = getConfig().getString("database.type", "yaml").toLowerCase();
+        switch (dbType) {
+            case "mysql":
+                saveToMySQL();
+                break;
+            case "sqlite":
+                saveToSQLite();
+                break;
+            case "yaml":
+            default:
                 saveToYAML();
-            }
+                break;
         }
     }
-
     private boolean saveToMySQL() {
         try {
             if (mySQLDatabase.isConnected()) {
