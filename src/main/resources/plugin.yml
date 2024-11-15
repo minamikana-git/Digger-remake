@@ -7,4 +7,12 @@ depend:
   - Vault
 author:
   Copyright (c) 2023-2024 ほたまちスバル
-
+commands:
+  reload:
+    description: 設定を再読み込みします。
+    usage: /reload
+    permission: digger.reload
+  set:
+    description: 掘ったブロック数を強制的にセットします。
+    usage: /set <value>
+    permission: digger.set
