@@ -3,7 +3,6 @@ package net.hotamachisubaru.digger;
 import net.hotamachisubaru.digger.enchant.EnchantManager;
 import net.hotamachisubaru.digger.mysql.MySQLDatabase;
 import net.hotamachisubaru.digger.sqlite.SQLiteDatabase;
-import net.milkbowl.vault.economy.Economy;
 import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
