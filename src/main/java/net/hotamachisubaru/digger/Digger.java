@@ -16,12 +16,14 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -30,9 +32,11 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.logging.Logger;
 
 public class Digger extends JavaPlugin implements Listener {
 
+    private final PluginManager pm = getServer().getPluginManager();
     private final Map<Location, UUID> placedBlocksWithUUID = new HashMap<>();
     private MySQLDatabase mySQLDatabase;
     private final SQLiteDatabase sqLiteDatabase = new SQLiteDatabase();
@@ -58,6 +62,8 @@ public class Digger extends JavaPlugin implements Listener {
     private String url;
     private String user;
     private String password;
+    public final Logger logger = getLogger();
+
 
     public Digger() {
         instance = this;
@@ -69,22 +75,29 @@ public class Digger extends JavaPlugin implements Listener {
 
     public boolean getCurrentSetting() {
         if (currentSetting == null) {
-            currentSetting = true; // Default value since isToolRewardEnabled was undefined
+            currentSetting = true;
         }
         return currentSetting;
     }
 
     @Override
     public void onEnable() {
-        getLogger().info("[ほたまち]整地プラグインを起動しています。データのロード中です。");
-        saveDefaultConfig();
-        toolMoney = new ToolMoney(getConfig(), this); // ToolMoneyインスタンスの初期化
+        logger.info("整地プラグインを起動しています。データのロード中です。");
+        toolMoney = new ToolMoney(getConfig(), this);// ToolMoneyインスタンスの初期化
+        setupResource();
         setupDatabase();
         setupCommands();
         setupScoreboard();
         setupEconomy();
         registerEvents();
         startScoreboardUpdater();
+    }
+
+    private void setupResource() {
+        saveDefaultConfig();
+        saveResource("config.properties", false); // config.propertiesの保存（既に存在する場合は上書きしない）
+        saveResource("player-data.yml", false);// player-data.ymlの保存（既に存在する場合は上書きしない）
+        saveResource("Database.db",false);
     }
 
     private void setupDatabase() {
@@ -99,7 +112,7 @@ public class Digger extends JavaPlugin implements Listener {
             case "yaml":
             default:
                 // YAMLの場合、特別な初期化は不要
-                getLogger().info("YAMLファイルを使用してデータを保存します。");
+                logger.info("YAMLファイルを使用してデータを保存します。");
                 break;
         }
     }
@@ -111,13 +124,24 @@ public class Digger extends JavaPlugin implements Listener {
 
 
     private void setupScoreboard() {
-        scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
-        objective = scoreboard.registerNewObjective("整地の順位", "dummy", ChatColor.GREEN + "あなたの順位");
-        objective.setDisplaySlot(DisplaySlot.SIDEBAR);
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                ScoreboardManager scoreboardManager = Bukkit.getScoreboardManager();
+                if (scoreboardManager == null) {
+                   logger.severe("スコアボードマネージャーを取得できませんでした。サーバーがまだ初期化されていない可能性があります。");
+                    return;
+                }
+                scoreboard = scoreboardManager.getNewScoreboard();
+                objective = scoreboard.registerNewObjective("整地の順位", "dummy", ChatColor.GREEN + "あなたの順位");
+                objective.setDisplaySlot(DisplaySlot.SIDEBAR);
+            }
+        }.runTaskLater(this, 40L); // 2秒後にスコアボードの初期化を試みる
     }
 
+
     private void registerEvents() {
-        getServer().getPluginManager().registerEvents(this, this);
+        pm.registerEvents(this, this);
     }
 
     private void initializeMySQLDatabase() {
@@ -130,23 +154,23 @@ public class Digger extends JavaPlugin implements Listener {
             }
 
             if (!mySQLDatabase.connect()) {
-                getLogger().severe("MySQLデータベースへの接続に失敗しました。");
+                logger.severe("MySQLデータベースへの接続に失敗しました。");
             } else {
-                getLogger().info("MySQLデータベースに正常に接続しました。");
+                logger.info("MySQLデータベースに正常に接続しました。");
             }
         } catch (IOException e) {
-            getLogger().severe("config.properties ファイルの読み込みに失敗しました: " + e.getMessage());
-            getServer().getPluginManager().disablePlugin(this);
+            logger.severe("config.properties ファイルの読み込みに失敗しました: " + e.getMessage());
+            pm.disablePlugin(this);
         }
     }
 
     private void initializeSQLiteDatabase() {
         try {
             sqLiteDatabase.openConnection(getDataFolder().getAbsolutePath());
-            getLogger().info("SQLiteデータベースに正常に接続しました。");
+            logger.info("SQLiteデータベースに正常に接続しました。");
         } catch (SQLException e) {
-            getLogger().severe("SQLiteデータベースの初期化に失敗しました: " + e.getMessage());
-            getServer().getPluginManager().disablePlugin(this);
+            logger.severe("SQLiteデータベースの初期化に失敗しました: " + e.getMessage());
+            pm.disablePlugin(this);
         }
     }
 
@@ -161,8 +185,8 @@ public class Digger extends JavaPlugin implements Listener {
         try (FileInputStream inputStream = new FileInputStream(configFile)) {
             prop.load(inputStream);
         } catch (IOException e) {
-            getLogger().severe("config.properties ファイルの読み込みに失敗しました: " + e.getMessage());
-            getServer().getPluginManager().disablePlugin(this);
+            logger.severe("config.properties ファイルの読み込みに失敗しました: " + e.getMessage());
+            pm.disablePlugin(this);
         }
     }
 
@@ -175,24 +199,24 @@ public class Digger extends JavaPlugin implements Listener {
             prop.setProperty("db.password", "password");
             prop.store(new FileWriter(configFile), "Database Configurations");
         } catch (IOException e) {
-            getLogger().severe("config.properties ファイルの生成に失敗しました: " + e.getMessage());
-            getServer().getPluginManager().disablePlugin(this);
+            logger.severe("config.properties ファイルの生成に失敗しました: " + e.getMessage());
+            pm.disablePlugin(this);
         }
     }
 
     private boolean setupEconomy() {
-        if (getServer().getPluginManager().getPlugin("Vault") == null) {
-            getLogger().warning("§4エラー：Vaultプラグインが見つかりませんでした。");
+        if (pm.getPlugin("Vault") == null) {
+            logger.warning("§4エラー：Vaultプラグインが見つかりませんでした。");
             return false;
         }
         RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
         if (rsp == null) {
-            getLogger().warning("§4エラー:Economyサービスプロバイダが登録されていません。");
+           logger.warning("§4エラー:Economyサービスプロバイダが登録されていません。");
             return false;
         }
         economy = rsp.getProvider();
         if (economy == null) {
-            getLogger().warning("§4エラー：Economyサービスが見つかりません。");
+           logger.warning("§4エラー：Economyサービスが見つかりません。");
             return false;
         }
         return true;
@@ -302,7 +326,7 @@ public class Digger extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        getLogger().info("[ほたまち]整地プラグインを終了しています。データ保存をしていますのでサーバーを強制終了しないでください。");
+       logger.info("[ほたまち]整地プラグインを終了しています。データ保存をしていますのでサーバーを強制終了しないでください。");
         saveData();
         getConfig().set("update-interval", scoreboardUpdateInterval);
         getConfig().set("world-blacklist", worldBlacklist);
@@ -332,15 +356,15 @@ public class Digger extends JavaPlugin implements Listener {
                 if (dataFromDatabase != null) {
                     blockCount.clear();
                     blockCount.putAll(dataFromDatabase);
-                    getLogger().info("データがSQLiteデータベースから読み込まれました。");
+                    logger.info("データがSQLiteデータベースから読み込まれました。");
                 } else {
-                    getLogger().warning("SQLiteデータベースからのデータが空です。");
+                    logger.warning("SQLiteデータベースからのデータが空です。");
                 }
             } else {
-                getLogger().warning("SQLiteデータベースへの接続が確立されていません。");
+                logger.warning("SQLiteデータベースへの接続が確立されていません。");
             }
         } catch (SQLException e) {
-            getLogger().severe("SQLiteデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
+            logger.severe("SQLiteデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
         }
     }
 
@@ -352,15 +376,15 @@ public class Digger extends JavaPlugin implements Listener {
                 if (dataFromDatabase != null && !dataFromDatabase.isEmpty()) {
                     blockCount.clear();
                     blockCount.putAll(dataFromDatabase);
-                    getLogger().info("データがMySQLデータベースから読み込まれました。");
+                    logger.info("データがMySQLデータベースから読み込まれました。");
                 } else {
-                    getLogger().warning("MySQLデータベースからのデータが空です。");
+                   logger.warning("MySQLデータベースからのデータが空です。");
                 }
             } else {
-                getLogger().warning("MySQLデータベースへの接続が確立されていません。");
+                logger.warning("MySQLデータベースへの接続が確立されていません。");
             }
         } catch (Exception e) {
-            getLogger().severe("MySQLデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
+            logger.severe("MySQLデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
         }
     }
 
@@ -369,7 +393,7 @@ public class Digger extends JavaPlugin implements Listener {
     private void loadFromYAML() {
         dataFile = new File(getDataFolder(), "player-data.yml");
         if (!dataFile.exists()) {
-            getLogger().info("player-data.ymlファイルが見つかりませんでした。新しく作成します。");
+           logger.info("player-data.ymlファイルが見つかりませんでした。新しく作成します。");
             saveResource("player-data.yml", false);
         }
         dataConfig = YamlConfiguration.loadConfiguration(dataFile);
@@ -382,7 +406,7 @@ public class Digger extends JavaPlugin implements Listener {
                 int blocksMined = dataConfig.getInt("blockCount." + uuidString + ".blocksMined");
                 blockCount.put(uuid, new PlayerData(playerName, blocksMined));
             }
-            getLogger().info("データをyamlファイルから読み込みました。");
+           logger.info("データをyamlファイルから読み込みました。");
         }
     }
 
@@ -405,11 +429,11 @@ public class Digger extends JavaPlugin implements Listener {
         try {
             if (mySQLDatabase.isConnected()) {
                 mySQLDatabase.savePlayerData(blockCount, placedBlocks, placedBlocksWithUUID);
-                getLogger().info("データをMySQLデータベースに保存しました。");
+                logger.info("データをMySQLデータベースに保存しました。");
                 return true;
             }
         } catch (Exception e) {
-            getLogger().warning("MySQLデータベースへの保存に失敗しました: " + e.getMessage());
+            logger.warning("MySQLデータベースへの保存に失敗しました: " + e.getMessage());
         }
         return false;
     }
@@ -417,10 +441,10 @@ public class Digger extends JavaPlugin implements Listener {
     private boolean saveToSQLite() {
         try {
             sqLiteDatabase.saveData(blockCount, placedBlocks);
-            getLogger().info("データをSQLiteデータベースに保存しました。");
+           logger.info("データをSQLiteデータベースに保存しました。");
             return true;
         } catch (SQLException e) {
-            getLogger().severe("SQLiteデータベースへの保存に失敗しました: " + e.getMessage());
+            logger.severe("SQLiteデータベースへの保存に失敗しました: " + e.getMessage());
             return false;
         }
     }
@@ -436,9 +460,9 @@ public class Digger extends JavaPlugin implements Listener {
             }
             try {
                 dataConfig.save(dataFile);
-                getLogger().info("データをYAMLファイルに保存しました。");
+                logger.info("データをYAMLファイルに保存しました。");
             } catch (IOException e) {
-                getLogger().severe("YAMLファイルの保存中にエラーが発生しました: " + e.getMessage());
+                logger.severe("YAMLファイルの保存中にエラーが発生しました: " + e.getMessage());
             }
         }
     }

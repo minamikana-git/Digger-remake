@@ -21,7 +21,7 @@ class CoordinatesDisplay(private val plugin: Digger, private val blockCount: Map
 
         // もし目的が存在しなければ、新しく登録します。
         if (objective == null) {
-            objective = scoreboard.registerNewObjective("showCoords", "dummy", ChatColor.GREEN.toString() + "掘削と座標")
+            objective = scoreboard.registerNewObjective("showCoords", "dummy", ChatColor.GREEN.toString() + "個数と座標")
             objective.setDisplaySlot(DisplaySlot.SIDEBAR) // サイドバーに表示する設定を行います。
         }
 
@@ -44,7 +44,7 @@ class CoordinatesDisplay(private val plugin: Digger, private val blockCount: Map
         val scoreboard = Bukkit.getScoreboardManager().newScoreboard
 
         // "diggingRank" という目的を作成し、表示名に色付きテキストを設定します。
-        val objective = scoreboard.registerNewObjective("diggingRank", "dummy", ChatColor.AQUA.toString() + "整地の順位")
+        val objective = scoreboard.registerNewObjective("diggingRank", "dummy", ChatColor.AQUA.toString() + "ダイヤの順位")
 
         // サイドバーに表示する設定を行います。
         objective.displaySlot = DisplaySlot.SIDEBAR
@@ -62,6 +62,6 @@ class CoordinatesDisplay(private val plugin: Digger, private val blockCount: Map
                     updateCoordinatesScoreboard(player)
                 }
             }
-        }.runTaskTimer(plugin, 0L, 20L) // このタスクはサーバーが起動した後、毎秒 (20ティック) ごとに実行されます。
+        }.runTaskTimer(plugin, 0L, 40L) // このタスクはサーバーが起動した後、2秒 (40ティック) ごとに実行されます。
     }
 }

@@ -32,7 +32,7 @@ public class ScoreboardHandler {
     // スコアボードのObjectiveを設定するメソッド
     private Objective setupObjective() {
         // 新しいObjectiveを登録し、表示スロットをSIDEBARに設定
-        Objective objective = scoreboard.registerNewObjective("stats", "dummy", ChatColor.GREEN + "整地の順位");
+        Objective objective = scoreboard.registerNewObjective("stats", "dummy", ChatColor.GREEN + "ダイヤモンドを集めた数");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
         return objective;
     }
@@ -51,7 +51,7 @@ public class ScoreboardHandler {
 
         // 新しいスコアボードとObjectiveを作成
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
-        Objective objective = scoreboard.registerNewObjective("stats", "dummy", ChatColor.GREEN + "整地の順位");
+        Objective objective = scoreboard.registerNewObjective("stats", "dummy", ChatColor.GREEN + "ダイヤモンドを集めた数");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
         // 掘ったブロック数に基づいてプレイヤーデータをソートし、トップ10を取得
@@ -81,7 +81,7 @@ public class ScoreboardHandler {
         // 空行とプレイヤー情報を表示
         objective.getScore(" ").setScore(2);  // 空行を挿入して視覚的に見やすくする
         objective.getScore(ChatColor.GOLD + "あなたの順位: " + rankDisplayText).setScore(1);
-        objective.getScore(ChatColor.GREEN + "掘ったブロック数: " + ChatColor.WHITE + viewerScore + "ブロック").setScore(0);
+        objective.getScore(ChatColor.GREEN + "掘ったダイヤモンド数: " + ChatColor.WHITE + viewerScore + "ダイヤ").setScore(0);
 
         // プレイヤーの現在の座標を表示
         Location location = viewingPlayer.getLocation();

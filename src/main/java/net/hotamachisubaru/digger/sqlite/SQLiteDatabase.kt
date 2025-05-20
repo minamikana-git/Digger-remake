@@ -61,10 +61,10 @@ class SQLiteDatabase {
                         // データベースからUUIDとブロックの採掘数を取得
                         val uuid = UUID.fromString(rs.getString("UUID"))
                         val playerName = rs.getString("PlayerName")
-                        val blocksMined = rs.getInt("BlocksMined")
+                        val diamondMined = rs.getInt("DiamondMined")
 
                         // 取得したデータでPlayerDataオブジェクトを作成
-                        val playerData = PlayerData(playerName, blocksMined)
+                        val playerData = PlayerData(playerName, diamondMined)
                         data[uuid] = playerData
                     }
                 }
