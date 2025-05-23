@@ -5,6 +5,7 @@ import net.hotamachisubaru.digger.sqlite.SQLiteDatabase;
 import org.bukkit.*;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.block.Block;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -33,12 +34,11 @@ public class Digger extends JavaPlugin implements Listener {
     private static Digger instance;
     public final Map<UUID, PlayerData> diamondCount = new HashMap<>();
     private final List<Location> placedBlocks = new ArrayList<>();
-    private final List<String> worldBlacklist = new ArrayList<>();
     private final long scoreboardUpdateInterval = 20L;
     private Scoreboard scoreboard;
     private Objective objective;
     public final Logger logger = getLogger();
-
+    private final Set<Location> placeBlocks = new HashSet<>();
     public Digger() {
         instance = this;
     }
@@ -146,27 +146,37 @@ public class Digger extends JavaPlugin implements Listener {
             pm.disablePlugin(this);
         }
     }
-
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
-        placedBlocksWithUUID.put(event.getBlock().getLocation(), event.getPlayer().getUniqueId());
+        Material type = event.getBlockPlaced().getType();
+        if (type == Material.DIAMOND_ORE || type == Material.DEEPSLATE_DIAMOND_ORE) {
+            placeBlocks.add(event.getBlockPlaced().getLocation());
+        }
     }
 
+    // ② ブロック破壊時に自然生成かどうかを判定してカウント
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        Player p = event.getPlayer();
-        if (worldBlacklist.contains(p.getWorld().getName())
-                || placedBlocks.remove(event.getBlock().getLocation())
-                || isBlockBlacklisted(event.getBlock().getType())) {
+        Player player = event.getPlayer();
+        Block block = event.getBlock();
+        Material type = block.getType();
+
+        // ダイヤ鉱石以外は無視
+        if (type != Material.DIAMOND_ORE && type != Material.DEEPSLATE_DIAMOND_ORE) {
             return;
         }
-        updateDiamondCount(p);
+
+        // 自分で設置したものなら placedBlocks から取り除いてスキップ
+        if (placeBlocks.remove(block.getLocation())) {
+            return;
+        }
+
+        // ここまで来たら“自然生成された”ダイヤ鉱石
+        updateDiamondCount(player);
     }
 
-    private boolean isBlockBlacklisted(Material m) {
-        return getConfig().getStringList("block-blacklist").contains(m.name());
-    }
 
+  //カウント処理
     private void updateDiamondCount(Player p) {
         UUID id = p.getUniqueId();
         PlayerData data = diamondCount.getOrDefault(id, new PlayerData(p.getName(), 0));
