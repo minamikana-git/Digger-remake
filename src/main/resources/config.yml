@@ -52,23 +52,9 @@ world-blacklist:
   - world_nether
   - world_the_end
 
-rewardProbability: 0.02
-use-tool-money: false
-tools:
-  NETHERITE_PICKAXE: 250
-  NETHERITE_SHOVEL: 250
-  DIAMOND_PICKAXE: 200
-  DIAMOND_SHOVEL: 200
-  GOLDEN_PICKAXE: 175
-  GOLDEN_SHOVEL: 175
-  IRON_PICKAXE: 150
-  IRON_SHOVEL: 150
-  STONE_PICKAXE: 100
-  STONE_SHOVEL: 100
-  WOODEN_PICKAXE: 50
-  WOODEN_SHOVEL: 50
+
 
 database:
-  type: mysql # または 'sqlite' や 'yaml' <-ここを変更してください。
+  type: mysql # または 'sqlite' <-ここを変更してください。
 
 

@@ -1,68 +1,43 @@
 package net.hotamachisubaru.digger;
 
-import net.hotamachisubaru.digger.enchant.EnchantManager;
 import net.hotamachisubaru.digger.mysql.MySQLDatabase;
 import net.hotamachisubaru.digger.sqlite.SQLiteDatabase;
 import org.bukkit.*;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.PluginManager;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scoreboard.DisplaySlot;
-import org.bukkit.scoreboard.Objective;
-import org.bukkit.scoreboard.Scoreboard;
-import org.bukkit.scoreboard.ScoreboardManager;
+import org.bukkit.scoreboard.*;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class Digger extends JavaPlugin implements Listener {
 
     private final PluginManager pm = getServer().getPluginManager();
     private final Map<Location, UUID> placedBlocksWithUUID = new HashMap<>();
     private MySQLDatabase mySQLDatabase;
-    private final SQLiteDatabase sqLiteDatabase = new SQLiteDatabase();
-    private FileConfiguration dataConfig;
-    private File dataFile;
-    private final EnchantManager enchantManager = new EnchantManager();
-    private boolean useToolMoney;
-    public final Map<UUID, Boolean> scoreboardToggles = new HashMap<>();
+    private SQLiteDatabase sqLiteDatabase;
     private static Digger instance;
-    private Boolean currentSetting = null;
-    public static double rewardProbability = 0.02;
-    public ToolMoney toolMoney;
-    private Scoreboard scoreboard;
-    private Economy economy;
-    private final long scoreboardUpdateInterval = 20L;
-    private Objective objective;
-    private final Map<Material, Integer> rewardMap = new HashMap<>();
-    public final Map<UUID, PlayerData> blockCount = new HashMap<>();
+    public final Map<UUID, PlayerData> diamondCount = new HashMap<>();
     private final List<Location> placedBlocks = new ArrayList<>();
     private final List<String> worldBlacklist = new ArrayList<>();
-    private Material toolType;
-    private Connection connection;
-    private String url;
-    private String user;
-    private String password;
+    private final long scoreboardUpdateInterval = 20L;
+    private Scoreboard scoreboard;
+    private Objective objective;
     public final Logger logger = getLogger();
-
 
     public Digger() {
         instance = this;
@@ -70,155 +45,19 @@ public class Digger extends JavaPlugin implements Listener {
 
     public static Digger getInstance() {
         return instance;
-    }
 
-    public boolean getCurrentSetting() {
-        if (currentSetting == null) {
-            currentSetting = true;
-        }
-        return currentSetting;
+
     }
 
     @Override
     public void onEnable() {
-        logger.info("整地プラグインを起動しています。データのロード中です。");
-        toolMoney = new ToolMoney(getConfig(), this);// ToolMoneyインスタンスの初期化
+        logger.info("プラグインを有効化します。");
         setupResource();
         setupDatabase();
         setupCommands();
         setupScoreboard();
-        setupEconomy();
         registerEvents();
         startScoreboardUpdater();
-    }
-
-    private void setupResource() {
-        saveDefaultConfig();
-        saveResource("config.properties", false); // config.propertiesの保存（既に存在する場合は上書きしない）
-        saveResource("player-data.yml", false);// player-data.ymlの保存（既に存在する場合は上書きしない）
-        saveResource("Database.db",false);
-    }
-
-    private void setupDatabase() {
-        String dbType = getConfig().getString("database.type", "yaml").toLowerCase();
-        switch (dbType) {
-            case "mysql":
-                initializeMySQLDatabase();
-                break;
-            case "sqlite":
-                initializeSQLiteDatabase();
-                break;
-            case "yaml":
-            default:
-                // YAMLの場合、特別な初期化は不要
-                logger.info("YAMLファイルを使用してデータを保存します。");
-                break;
-        }
-    }
-    private void setupCommands() {
-        Commands commandExecutor = new Commands(this, toolMoney);
-        getCommand("reload").setExecutor(commandExecutor);
-        getCommand("set").setExecutor(commandExecutor);
-    }
-
-
-    private void setupScoreboard() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                ScoreboardManager scoreboardManager = Bukkit.getScoreboardManager();
-                if (scoreboardManager == null) {
-                   logger.severe("スコアボードマネージャーを取得できませんでした。サーバーがまだ初期化されていない可能性があります。");
-                    return;
-                }
-                scoreboard = scoreboardManager.getNewScoreboard();
-                objective = scoreboard.registerNewObjective("整地の順位", "dummy", ChatColor.GREEN + "あなたの順位");
-                objective.setDisplaySlot(DisplaySlot.SIDEBAR);
-            }
-        }.runTaskLater(this, 40L); // 2秒後にスコアボードの初期化を試みる
-    }
-
-
-    private void registerEvents() {
-        pm.registerEvents(this, this);
-    }
-
-    private void initializeMySQLDatabase() {
-        try {
-            if (mySQLDatabase == null) {
-                Properties prop = new Properties();
-                File configFile = new File(getDataFolder(), "config.properties");
-                prop.load(new FileInputStream(configFile));
-                mySQLDatabase = new MySQLDatabase(prop);
-            }
-
-            if (!mySQLDatabase.connect()) {
-                logger.severe("MySQLデータベースへの接続に失敗しました。");
-            } else {
-                logger.info("MySQLデータベースに正常に接続しました。");
-            }
-        } catch (IOException e) {
-            logger.severe("config.properties ファイルの読み込みに失敗しました: " + e.getMessage());
-            pm.disablePlugin(this);
-        }
-    }
-
-    private void initializeSQLiteDatabase() {
-        try {
-            sqLiteDatabase.openConnection(getDataFolder().getAbsolutePath());
-            logger.info("SQLiteデータベースに正常に接続しました。");
-        } catch (SQLException e) {
-            logger.severe("SQLiteデータベースの初期化に失敗しました: " + e.getMessage());
-            pm.disablePlugin(this);
-        }
-    }
-
-    private void loadPropertiesConfig() {
-        File configFile = new File(getDataFolder(), "config.properties");
-        Properties prop = new Properties();
-
-        if (!configFile.exists()) {
-            createDefaultConfigFile(configFile, prop);
-        }
-
-        try (FileInputStream inputStream = new FileInputStream(configFile)) {
-            prop.load(inputStream);
-        } catch (IOException e) {
-            logger.severe("config.properties ファイルの読み込みに失敗しました: " + e.getMessage());
-            pm.disablePlugin(this);
-        }
-    }
-
-    private void createDefaultConfigFile(File configFile, Properties prop) {
-        try {
-            configFile.getParentFile().mkdirs();
-            configFile.createNewFile();
-            prop.setProperty("db.url", "jdbc:mysql://localhost:3306/yourdatabase");
-            prop.setProperty("db.user", "username");
-            prop.setProperty("db.password", "password");
-            prop.store(new FileWriter(configFile), "Database Configurations");
-        } catch (IOException e) {
-            logger.severe("config.properties ファイルの生成に失敗しました: " + e.getMessage());
-            pm.disablePlugin(this);
-        }
-    }
-
-    private boolean setupEconomy() {
-        if (pm.getPlugin("Vault") == null) {
-            logger.warning("§4エラー：Vaultプラグインが見つかりませんでした。");
-            return false;
-        }
-        RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
-        if (rsp == null) {
-           logger.warning("§4エラー:Economyサービスプロバイダが登録されていません。");
-            return false;
-        }
-        economy = rsp.getProvider();
-        if (economy == null) {
-           logger.warning("§4エラー：Economyサービスが見つかりません。");
-            return false;
-        }
-        return true;
     }
 
     private void startScoreboardUpdater() {
@@ -230,265 +69,200 @@ public class Digger extends JavaPlugin implements Listener {
         }.runTaskTimer(this, 20L, scoreboardUpdateInterval);
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("§cこのコマンドはプレイヤーからのみ実行できます。");
-            return true;
-        }
-
-        if (cmd.getName().equalsIgnoreCase("reload")) {
-            return handleReloadCommand(player);
-        }
-        return false;
+    private void setupResource() {
+        saveDefaultConfig();
+        saveResource("config.properties", false);
+        saveResource("Database.db", false);
     }
 
-    private boolean handleReloadCommand(Player player) {
-        if (!player.hasPermission("digger.reload")) {
-            player.sendMessage("§cあなたにはこのコマンドを実行する権限がありません。");
-            return true;
+    private void setupDatabase() {
+        String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
+        if ("mysql".equals(dbType)) {
+            initializeMySQLDatabase();
+        } else {
+            initializeSQLiteDatabase();
         }
+    }
 
-        this.reloadConfig();
-        Digger.rewardProbability = this.getConfig().getDouble("rewardProbability", 0.02);
-        player.sendMessage("§a config.ymlを再読み込みしました。");
-        return true;
+    private void setupCommands() {
+        getCommand("reload").setExecutor(new Commands(this));
+    }
+
+    private void setupScoreboard() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                ScoreboardManager sm = Bukkit.getScoreboardManager();
+                if (sm == null) {
+                    logger.severe("ScoreboardManager が取得できません。");
+                    return;
+                }
+                scoreboard = sm.getNewScoreboard();
+
+                // ObjectiveCriteria の代わりに "dummy" を文字列で渡す
+                objective = scoreboard.registerNewObjective(
+                        "stats",
+                        "dummy",
+                        ChatColor.GREEN + "あなたの順位"
+                );
+                objective.setDisplaySlot(DisplaySlot.SIDEBAR);
+
+            }
+        }.runTaskLater(this, 20L);
+    }
+
+    private void registerEvents() {
+        pm.registerEvents(this, this);
+    }
+
+    private void initializeMySQLDatabase() {
+        try {
+            if (mySQLDatabase == null) {
+                Properties prop = new Properties();
+                prop.load(new FileInputStream(new File(getDataFolder(), "config.properties")));
+                mySQLDatabase = new MySQLDatabase(prop);
+            }
+            if (!mySQLDatabase.isConnected()) {
+                logger.severe("MySQL への接続に失敗しました。");
+            } else {
+                logger.info("MySQL に正常に接続しました。");
+            }
+        } catch (IOException e) {
+            logger.severe("config.properties の読み込みに失敗: " + e.getMessage());
+            pm.disablePlugin(this);
+        }
+    }
+
+    private void initializeSQLiteDatabase() {
+        // companion object の getInstance() を呼ぶ
+        sqLiteDatabase = SQLiteDatabase.Companion.getInstance();
+        try {
+            if (!sqLiteDatabase.checkConnection()) {
+                sqLiteDatabase.openConnection(getDataFolder().getAbsolutePath());
+            }
+            logger.info("SQLite に正常に接続しました。");
+        } catch (SQLException e) {
+            logger.severe("SQLite の初期化に失敗: " + e.getMessage());
+            pm.disablePlugin(this);
+        }
     }
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
-        Player player = event.getPlayer();
-        UUID playerId = player.getUniqueId();
-        Location loc = event.getBlock().getLocation();
-        placedBlocksWithUUID.put(loc, playerId);
+        placedBlocksWithUUID.put(event.getBlock().getLocation(), event.getPlayer().getUniqueId());
     }
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        Player player = event.getPlayer();
-        World world = player.getWorld();
-        if (worldBlacklist.contains(world.getName()) ||
-                placedBlocks.remove(event.getBlock().getLocation()) ||
-                isBlockBlacklisted(event.getBlock().getType())) {
+        Player p = event.getPlayer();
+        if (worldBlacklist.contains(p.getWorld().getName())
+                || placedBlocks.remove(event.getBlock().getLocation())
+                || isBlockBlacklisted(event.getBlock().getType())) {
             return;
         }
-
-        updateBlockCount(player);
-        giveReward(player);
-        enchantManager.applyEfficiencyEnchant(player, getBlocksMined(player));
+        updateDiamondCount(p);
     }
 
-    private int getBlocksMined(Player player) {
-        UUID playerID = player.getUniqueId();
-        PlayerData data = blockCount.get(playerID);
-        return data != null ? data.getBlocksMined() : 0;
+    private boolean isBlockBlacklisted(Material m) {
+        return getConfig().getStringList("block-blacklist").contains(m.name());
     }
 
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        saveData();
-    }
-
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        saveData();
-        loadData();
-    }
-
-    public void updateBlockCount(Player player) {
-        UUID playerID = player.getUniqueId();
-        PlayerData data = blockCount.getOrDefault(playerID, new PlayerData(player.getName(), 0));
-        data.setBlocksMined(data.getBlocksMined() + 1);
-        blockCount.put(playerID, data);
-    }
-
-    private void giveReward(Player player) {
-        Material toolType = player.getInventory().getItemInMainHand().getType();
-        Integer toolReward = rewardMap.getOrDefault(toolType, 50);
-        if (Math.random() < rewardProbability) {
-            economy.depositPlayer(player, toolReward);
-            player.sendMessage("§a " + toolReward + "円を手に入れました。");
-            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0F, 1.0F);
-        }
-    }
-
-    private boolean isBlockBlacklisted(Material material) {
-        List<String> blacklist = getConfig().getStringList("block-blacklist");
-        return blacklist.contains(material.name());
+    private void updateDiamondCount(Player p) {
+        UUID id = p.getUniqueId();
+        PlayerData data = diamondCount.getOrDefault(id, new PlayerData(p.getName(), 0));
+        data.setDiamondMined(data.getDiamondMined() + 1);
+        diamondCount.put(id, data);
     }
 
     public void updateAllPlayersScoreboard() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            ScoreboardHandler.updateScoreboard(player);
+        // Map<UUID, Integer> に変換して渡す
+        Map<UUID, Integer> counts = diamondCount.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> e.getValue().getDiamondMined()
+                ));
+        CoordinatesDisplay disp = new CoordinatesDisplay(this, counts);
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            disp.updateScoreboard(p);
         }
     }
 
     @Override
     public void onDisable() {
-       logger.info("[ほたまち]整地プラグインを終了しています。データ保存をしていますのでサーバーを強制終了しないでください。");
+        logger.info("プラグインを無効化します。データを保存中…");
         saveData();
-        getConfig().set("update-interval", scoreboardUpdateInterval);
-        getConfig().set("world-blacklist", worldBlacklist);
         saveConfig();
     }
 
     public void loadData() {
-        String dbType = getConfig().getString("database.type", "yaml").toLowerCase();
-        switch (dbType) {
-            case "mysql":
-                loadFromMySQL();
-                break;
-            case "sqlite":
-                loadFromSQLite();
-                break;
-            case "yaml":
-            default:
-                loadFromYAML();
-                break;
+        String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
+        if ("mysql".equals(dbType)) {
+            loadFromMySQL();
+        } else {
+            loadFromSQLite();
         }
     }
 
     private void loadFromSQLite() {
         try {
-            if (sqLiteDatabase.checkConnection()) {
-                Map<UUID, PlayerData> dataFromDatabase = sqLiteDatabase.getData();
-                if (dataFromDatabase != null) {
-                    blockCount.clear();
-                    blockCount.putAll(dataFromDatabase);
-                    logger.info("データがSQLiteデータベースから読み込まれました。");
-                } else {
-                    logger.warning("SQLiteデータベースからのデータが空です。");
-                }
-            } else {
-                logger.warning("SQLiteデータベースへの接続が確立されていません。");
-            }
+            Map<UUID, PlayerData> data = sqLiteDatabase.getData();
+            diamondCount.clear();
+            diamondCount.putAll(data);
+            logger.info("SQLite から読み込み完了。");
         } catch (SQLException e) {
-            logger.severe("SQLiteデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
+            logger.severe("SQLite 読み込みエラー: " + e.getMessage());
         }
     }
-
 
     private void loadFromMySQL() {
-        try {
-            if (mySQLDatabase.isConnected()) {
-                Map<UUID, PlayerData> dataFromDatabase = mySQLDatabase.loadData();
-                if (dataFromDatabase != null && !dataFromDatabase.isEmpty()) {
-                    blockCount.clear();
-                    blockCount.putAll(dataFromDatabase);
-                    logger.info("データがMySQLデータベースから読み込まれました。");
-                } else {
-                   logger.warning("MySQLデータベースからのデータが空です。");
-                }
-            } else {
-                logger.warning("MySQLデータベースへの接続が確立されていません。");
-            }
-        } catch (Exception e) {
-            logger.severe("MySQLデータベースからの読み込み中にエラーが発生しました: " + e.getMessage());
-        }
-    }
-
-
-
-    private void loadFromYAML() {
-        dataFile = new File(getDataFolder(), "player-data.yml");
-        if (!dataFile.exists()) {
-           logger.info("player-data.ymlファイルが見つかりませんでした。新しく作成します。");
-            saveResource("player-data.yml", false);
-        }
-        dataConfig = YamlConfiguration.loadConfiguration(dataFile);
-
-        if (dataConfig.contains("blockCount")) {
-            blockCount.clear();
-            for (String uuidString : dataConfig.getConfigurationSection("blockCount").getKeys(false)) {
-                UUID uuid = UUID.fromString(uuidString);
-                String playerName = dataConfig.getString("blockCount." + uuidString + ".playerName");
-                int blocksMined = dataConfig.getInt("blockCount." + uuidString + ".blocksMined");
-                blockCount.put(uuid, new PlayerData(playerName, blocksMined));
-            }
-           logger.info("データをyamlファイルから読み込みました。");
+        if (mySQLDatabase.isConnected()) {
+            Map<UUID, PlayerData> data = mySQLDatabase.loadData();
+            diamondCount.clear();
+            diamondCount.putAll(data);
+            logger.info("MySQL から読み込み完了。");
         }
     }
 
     public void saveData() {
-        String dbType = getConfig().getString("database.type", "yaml").toLowerCase();
-        switch (dbType) {
-            case "mysql":
-                saveToMySQL();
-                break;
-            case "sqlite":
-                saveToSQLite();
-                break;
-            case "yaml":
-            default:
-                saveToYAML();
-                break;
+        String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
+        if ("mysql".equals(dbType)) {
+            saveToMySQL();
+        } else {
+            saveToSQLite();
         }
-    }
-    private boolean saveToMySQL() {
-        try {
-            if (mySQLDatabase.isConnected()) {
-                mySQLDatabase.savePlayerData(blockCount, placedBlocks, placedBlocksWithUUID);
-                logger.info("データをMySQLデータベースに保存しました。");
-                return true;
-            }
-        } catch (Exception e) {
-            logger.warning("MySQLデータベースへの保存に失敗しました: " + e.getMessage());
-        }
-        return false;
     }
 
-    private boolean saveToSQLite() {
+    private void saveToMySQL() {
+        if (mySQLDatabase.isConnected()) {
+            mySQLDatabase.saveData(
+                    diamondCount,
+                    placedBlocks,
+                    placedBlocksWithUUID
+            );
+            logger.info("MySQL に保存完了。");
+        }
+    }
+
+    private void saveToSQLite() {
         try {
-            sqLiteDatabase.saveData(blockCount, placedBlocks);
-           logger.info("データをSQLiteデータベースに保存しました。");
-            return true;
+            sqLiteDatabase.saveData(diamondCount, placedBlocks);
+            logger.info("SQLite に保存完了。");
         } catch (SQLException e) {
-            logger.severe("SQLiteデータベースへの保存に失敗しました: " + e.getMessage());
-            return false;
-        }
-    }
-
-
-    private void saveToYAML() {
-        if (dataConfig != null) {
-            for (Map.Entry<UUID, PlayerData> entry : blockCount.entrySet()) {
-                UUID uuid = entry.getKey();
-                PlayerData playerData = entry.getValue();
-                dataConfig.set("blockCount." + uuid.toString() + ".blocksMined", playerData.getBlocksMined());
-                dataConfig.set("blockCount." + uuid + ".playerName", playerData.getPlayerName());
-            }
-            try {
-                dataConfig.save(dataFile);
-                logger.info("データをYAMLファイルに保存しました。");
-            } catch (IOException e) {
-                logger.severe("YAMLファイルの保存中にエラーが発生しました: " + e.getMessage());
-            }
+            logger.severe("SQLite 保存エラー: " + e.getMessage());
         }
     }
 
     public static class PlayerData {
-        private String playerName;
-        private int blocksMined;
+        private final String playerName;
+        private int diamondMined;
 
-        public PlayerData(String playerName, int blocksMined) {
+        public PlayerData(String playerName, int diamondMined) {
             this.playerName = playerName;
-            this.blocksMined = blocksMined;
+            this.diamondMined = diamondMined;
         }
 
-        public String getPlayerName() {
-            return playerName;
-        }
-
-        public void setPlayerName(String playerName) {
-            this.playerName = playerName;
-        }
-
-        public int getBlocksMined() {
-            return blocksMined;
-        }
-
-        public void setBlocksMined(int blocksMined) {
-            this.blocksMined = blocksMined;
-        }
+        public String getPlayerName() { return playerName; }
+        public int getDiamondMined() { return diamondMined; }
+        public void setDiamondMined(int v) { this.diamondMined = v; }
     }
 }

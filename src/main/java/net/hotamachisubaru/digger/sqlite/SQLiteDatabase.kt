@@ -100,7 +100,7 @@ class SQLiteDatabase {
         connection!!.prepareStatement(diamondCountQuery).use { pstmt ->
             for ((key, value) in diamondCount) {
                 pstmt.setString(1, key.toString())
-                pstmt.setInt(2, value.DiamondMined)
+                pstmt.setInt(2, value.diamondMined)
                 pstmt.setString(3, value.playerName)
                 pstmt.executeUpdate()
             }
@@ -137,15 +137,15 @@ class SQLiteDatabase {
         }
     }
 
-    companion object {
+
         // シングルトンインスタンスの取得メソッド
-        var instance: SQLiteDatabase? = null
-            get() {
-                if (field == null) {
-                    field = SQLiteDatabase()
-                }
-                return field
+    companion object {
+            @JvmStatic
+            fun getInstance(): SQLiteDatabase {
+                if (_instance == null) _instance = SQLiteDatabase()
+                return _instance!!
             }
-            private set
+
+            private var _instance: SQLiteDatabase? = null
+        }
     }
-}
