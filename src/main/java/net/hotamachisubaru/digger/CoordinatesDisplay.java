@@ -3,88 +3,86 @@ package net.hotamachisubaru.digger;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.NamespacedKey;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scoreboard.DisplaySlot;
-import org.bukkit.scoreboard.Objective;
-import org.bukkit.scoreboard.Scoreboard;
-import org.bukkit.scoreboard.Criteria;
+import org.bukkit.scoreboard.*;
 
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class CoordinatesDisplay {
 
     private final Digger plugin;
     private final Map<UUID, Integer> diamondCount;
-    private final NamespacedKey coordsKey;
-    private final NamespacedKey rankKey;
 
     public CoordinatesDisplay(Digger plugin, Map<UUID, Integer> diamondCount) {
         this.plugin = plugin;
         this.diamondCount = diamondCount;
-        this.coordsKey = new NamespacedKey(plugin, "showCoords");
-        this.rankKey = new NamespacedKey(plugin, "diggingRank");
     }
 
-    /**
-     * 座標表示用スコアボードを更新
-     */
-    private void updateCoordinatesScoreboard(Player player) {
-        Scoreboard board = player.getScoreboard();
-
-        Objective obj = board.getObjective(String.valueOf(coordsKey));
-        if (obj == null) {
-            obj = board.registerNewObjective(
-                    String.valueOf(coordsKey),
-                    Criteria.DUMMY,
-                    Component.text("個数と座標", NamedTextColor.GREEN)
-            );
-            obj.setDisplaySlot(DisplaySlot.SIDEBAR);
-        }
-
-        var loc = player.getLocation();
-        obj.getScore("X: " + loc.getBlockX()).setScore(3);
-        obj.getScore("Y: " + loc.getBlockY()).setScore(2);
-        obj.getScore("Z: " + loc.getBlockZ()).setScore(1);
-
-        player.setScoreboard(board);
-    }
-
-    /**
-     * ダイヤ掘削ランキングを更新
-     */
+    // サイドバーにランキングと座標を同時表示
     public void updateScoreboard(Player player) {
-        Scoreboard board = Bukkit.getScoreboardManager().getNewScoreboard();
+        ScoreboardManager sm = Bukkit.getScoreboardManager();
+        if (sm == null) return;
+        Scoreboard board = sm.getNewScoreboard();
 
         Objective obj = board.registerNewObjective(
-                String.valueOf(rankKey),
-                Criteria.DUMMY,
-                Component.text("ダイヤの順位", NamedTextColor.AQUA)
+                "digger_board",
+                "dummy",
+                "§bダイヤランキング"
         );
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        Integer count = diamondCount.get(player.getUniqueId());
-        if (count != null) {
-            obj.getScore(player.getName()).setScore(count);
+        // ランキング表示準備
+        List<Map.Entry<UUID, Integer>> sorted = new ArrayList<>(diamondCount.entrySet());
+        sorted.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+        int line = 10;
+        int rank = 1;
+        int myRank = -1;
+        UUID myId = player.getUniqueId();
+
+        // 上位3人の表示
+        for (Map.Entry<UUID, Integer> entry : sorted) {
+            String name = Bukkit.getOfflinePlayer(entry.getKey()).getName();
+            if (name == null) name = "Unknown";
+            int count = entry.getValue();
+            String label = rank + "位: " + name + " [" + count + "] 個";
+            obj.getScore(label).setScore(line--);
+
+            if (entry.getKey().equals(myId)) {
+                myRank = rank;
+            }
+            if (rank >= 3) break;
+            rank++;
         }
+
+        // 圏外の自分も表示
+        Integer myCount = diamondCount.get(myId);
+        if (myCount != null && myRank > 3) {
+            obj.getScore("あなた(" + myRank + "位): " + myCount + " 個").setScore(line--);
+        }
+
+        // 座標表示
+        var loc = player.getLocation();
+        obj.getScore("§aX: " + loc.getBlockX()).setScore(line--);
+        obj.getScore("§aY: " + loc.getBlockY()).setScore(line--);
+        obj.getScore("§aZ: " + loc.getBlockZ()).setScore(line--);
 
         player.setScoreboard(board);
     }
 
     /**
-     * 2秒ごとに全員のスコアを更新
+     * 全員分のスコアボードを定期的に更新
      */
     public void startCoordinateUpdates() {
         new BukkitRunnable() {
             @Override
             public void run() {
                 for (Player p : Bukkit.getOnlinePlayers()) {
-                    updateCoordinatesScoreboard(p);
                     updateScoreboard(p);
                 }
             }
-        }.runTaskTimer(plugin, 0L, 40L);
+        }.runTaskTimer(plugin, 0L, 40L); // 2秒ごと
     }
 }

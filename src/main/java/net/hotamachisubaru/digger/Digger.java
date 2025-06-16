@@ -3,10 +3,7 @@ package net.hotamachisubaru.digger;
 import net.hotamachisubaru.digger.mysql.MySQLDatabase;
 import net.hotamachisubaru.digger.sqlite.SQLiteDatabase;
 import org.bukkit.*;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.block.Block;
-import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -15,7 +12,6 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scoreboard.*;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -25,42 +21,45 @@ import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+/**
+ * メインプラグインクラス
+ */
 public class Digger extends JavaPlugin implements Listener {
 
+    // === フィールド ===
+    private static Digger instance;
+    private final Logger logger = getLogger();
     private final PluginManager pm = getServer().getPluginManager();
+    // データ
+    public final Map<UUID, PlayerData> diamondCount = new HashMap<>();
+    private final Set<Location> placedBlocks = new HashSet<>();
     private final Map<Location, UUID> placedBlocksWithUUID = new HashMap<>();
+
+    // データベース
     private MySQLDatabase mySQLDatabase;
     private SQLiteDatabase sqLiteDatabase;
-    private static Digger instance;
-    public final Map<UUID, PlayerData> diamondCount = new HashMap<>();
-    private final List<Location> placedBlocks = new ArrayList<>();
-    private final long scoreboardUpdateInterval = 20L;
-    private Scoreboard scoreboard;
-    private Objective objective;
-    public final Logger logger = getLogger();
-    private final Set<Location> placeBlocks = new HashSet<>();
+
+    // 更新間隔
+    private final long scoreboardUpdateInterval = 20L; // 1秒ごと
+
+    // === プラグイン初期化 ===
     public Digger() {
         instance = this;
     }
-
     public static Digger getInstance() {
         return instance;
-
-
     }
 
     @Override
     public void onEnable() {
         logger.info("プラグインを有効化します。");
-        setupResource();
+        saveDefaultConfig();
+        setupFiles();
         setupDatabase();
-        setupCommands();
-        setupScoreboard();
-        registerEvents();
-        startScoreboardUpdater();
-    }
+        getCommand("reload").setExecutor(new Commands(this));
+        pm.registerEvents(this, this);
 
-    private void startScoreboardUpdater() {
+        // サイドバーの定期更新
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -69,59 +68,27 @@ public class Digger extends JavaPlugin implements Listener {
         }.runTaskTimer(this, 20L, scoreboardUpdateInterval);
     }
 
-    private void setupResource() {
-        saveDefaultConfig();
+    private void setupFiles() {
         saveResource("config.properties", false);
         saveResource("Database.db", false);
     }
 
+    // === データベース初期化 ===
     private void setupDatabase() {
         String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
         if ("mysql".equals(dbType)) {
-            initializeMySQLDatabase();
+            initMySQL();
         } else {
-            initializeSQLiteDatabase();
+            initSQLite();
         }
     }
 
-    private void setupCommands() {
-        getCommand("reload").setExecutor(new Commands(this));
-    }
-
-    private void setupScoreboard() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                ScoreboardManager sm = Bukkit.getScoreboardManager();
-                if (sm == null) {
-                    logger.severe("ScoreboardManager が取得できません。");
-                    return;
-                }
-                scoreboard = sm.getNewScoreboard();
-
-                // ObjectiveCriteria の代わりに "dummy" を文字列で渡す
-                objective = scoreboard.registerNewObjective(
-                        "stats",
-                        "dummy",
-                        ChatColor.GREEN + "あなたの順位"
-                );
-                objective.setDisplaySlot(DisplaySlot.SIDEBAR);
-
-            }
-        }.runTaskLater(this, 20L);
-    }
-
-    private void registerEvents() {
-        pm.registerEvents(this, this);
-    }
-
-    private void initializeMySQLDatabase() {
+    private void initMySQL() {
         try {
-            if (mySQLDatabase == null) {
-                Properties prop = new Properties();
-                prop.load(new FileInputStream(new File(getDataFolder(), "config.properties")));
-                mySQLDatabase = new MySQLDatabase(prop);
-            }
+            Properties prop = new Properties();
+            prop.load(new FileInputStream(new File(getDataFolder(), "config.properties")));
+            mySQLDatabase = new MySQLDatabase(prop);
+
             if (!mySQLDatabase.isConnected()) {
                 logger.severe("MySQL への接続に失敗しました。");
             } else {
@@ -133,8 +100,7 @@ public class Digger extends JavaPlugin implements Listener {
         }
     }
 
-    private void initializeSQLiteDatabase() {
-        // companion object の getInstance() を呼ぶ
+    private void initSQLite() {
         sqLiteDatabase = SQLiteDatabase.Companion.getInstance();
         try {
             if (!sqLiteDatabase.checkConnection()) {
@@ -146,46 +112,44 @@ public class Digger extends JavaPlugin implements Listener {
             pm.disablePlugin(this);
         }
     }
+
+    // === イベント登録 ===
+
+    // ダイヤ設置ブロック記録
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Material type = event.getBlockPlaced().getType();
         if (type == Material.DIAMOND_ORE || type == Material.DEEPSLATE_DIAMOND_ORE) {
-            placeBlocks.add(event.getBlockPlaced().getLocation());
+            placedBlocks.add(event.getBlockPlaced().getLocation());
         }
     }
 
-    // ② ブロック破壊時に自然生成かどうかを判定してカウント
+    // ダイヤ破壊判定（自然生成のみカウント）
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
         Block block = event.getBlock();
         Material type = block.getType();
 
-        // ダイヤ鉱石以外は無視
-        if (type != Material.DIAMOND_ORE && type != Material.DEEPSLATE_DIAMOND_ORE) {
-            return;
-        }
+        if (type != Material.DIAMOND_ORE && type != Material.DEEPSLATE_DIAMOND_ORE) return;
 
-        // 自分で設置したものなら placedBlocks から取り除いてスキップ
-        if (placeBlocks.remove(block.getLocation())) {
-            return;
-        }
+        if (placedBlocks.remove(block.getLocation())) return; // 自分設置ならカウントしない
 
-        // ここまで来たら“自然生成された”ダイヤ鉱石
-        updateDiamondCount(player);
+        // カウントアップ
+        incrementDiamondCount(player);
     }
 
-
-  //カウント処理
-    private void updateDiamondCount(Player p) {
-        UUID id = p.getUniqueId();
-        PlayerData data = diamondCount.getOrDefault(id, new PlayerData(p.getName(), 0));
+    private void incrementDiamondCount(Player player) {
+        UUID id = player.getUniqueId();
+        PlayerData data = diamondCount.getOrDefault(id, new PlayerData(player.getName(), 0));
         data.setDiamondMined(data.getDiamondMined() + 1);
         diamondCount.put(id, data);
     }
 
+    // === スコアボード更新 ===
+
     public void updateAllPlayersScoreboard() {
-        // Map<UUID, Integer> に変換して渡す
+        // Map<UUID, Integer> に変換
         Map<UUID, Integer> counts = diamondCount.entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
@@ -197,6 +161,8 @@ public class Digger extends JavaPlugin implements Listener {
         }
     }
 
+    // === データ保存/ロード ===
+
     @Override
     public void onDisable() {
         logger.info("プラグインを無効化します。データを保存中…");
@@ -207,61 +173,42 @@ public class Digger extends JavaPlugin implements Listener {
     public void loadData() {
         String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
         if ("mysql".equals(dbType)) {
-            loadFromMySQL();
+            if (mySQLDatabase.isConnected()) {
+                Map<UUID, PlayerData> data = mySQLDatabase.loadData();
+                diamondCount.clear();
+                diamondCount.putAll(data);
+                logger.info("MySQL から読み込み完了。");
+            }
         } else {
-            loadFromSQLite();
-        }
-    }
-
-    private void loadFromSQLite() {
-        try {
-            Map<UUID, PlayerData> data = sqLiteDatabase.getData();
-            diamondCount.clear();
-            diamondCount.putAll(data);
-            logger.info("SQLite から読み込み完了。");
-        } catch (SQLException e) {
-            logger.severe("SQLite 読み込みエラー: " + e.getMessage());
-        }
-    }
-
-    private void loadFromMySQL() {
-        if (mySQLDatabase.isConnected()) {
-            Map<UUID, PlayerData> data = mySQLDatabase.loadData();
-            diamondCount.clear();
-            diamondCount.putAll(data);
-            logger.info("MySQL から読み込み完了。");
+            try {
+                Map<UUID, PlayerData> data = sqLiteDatabase.getData();
+                diamondCount.clear();
+                diamondCount.putAll(data);
+                logger.info("SQLite から読み込み完了。");
+            } catch (SQLException e) {
+                logger.severe("SQLite 読み込みエラー: " + e.getMessage());
+            }
         }
     }
 
     public void saveData() {
         String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
         if ("mysql".equals(dbType)) {
-            saveToMySQL();
+            if (mySQLDatabase.isConnected()) {
+                mySQLDatabase.saveData(diamondCount, new ArrayList<>(placedBlocks), placedBlocksWithUUID);
+                logger.info("MySQL に保存完了。");
+            }
         } else {
-            saveToSQLite();
+            try {
+                sqLiteDatabase.saveData(diamondCount, new ArrayList<>(placedBlocks));
+                logger.info("SQLite に保存完了。");
+            } catch (SQLException e) {
+                logger.severe("SQLite 保存エラー: " + e.getMessage());
+            }
         }
     }
 
-    private void saveToMySQL() {
-        if (mySQLDatabase.isConnected()) {
-            mySQLDatabase.saveData(
-                    diamondCount,
-                    placedBlocks,
-                    placedBlocksWithUUID
-            );
-            logger.info("MySQL に保存完了。");
-        }
-    }
-
-    private void saveToSQLite() {
-        try {
-            sqLiteDatabase.saveData(diamondCount, placedBlocks);
-            logger.info("SQLite に保存完了。");
-        } catch (SQLException e) {
-            logger.severe("SQLite 保存エラー: " + e.getMessage());
-        }
-    }
-
+    // === 内部データ構造 ===
     public static class PlayerData {
         private final String playerName;
         private int diamondMined;
