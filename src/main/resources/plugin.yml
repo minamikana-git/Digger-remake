@@ -11,6 +11,13 @@ commands:
     usage: /reload
     permission: digger.reload
   set:
-    description: 掘ったブロック数を強制的にセットします。
+    description: 掘ったダイヤモンド数を強制的にセットします。
     usage: /set <value>
     permission: digger.set
+permissions:
+  digger.reload:
+    description: 設定を再読み込みします。
+    default: op
+  digger.set:
+    description: 掘ったダイヤモンド数を強制的にセットします。
+    default: op

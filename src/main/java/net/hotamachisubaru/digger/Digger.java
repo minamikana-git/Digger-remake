@@ -57,6 +57,7 @@ public class Digger extends JavaPlugin implements Listener {
         setupFiles();
         setupDatabase();
         getCommand("reload").setExecutor(new Commands(this));
+        getCommand("set").setExecutor(new Commands(this));
         pm.registerEvents(this, this);
 
         // サイドバーの定期更新
