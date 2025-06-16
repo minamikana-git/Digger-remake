@@ -15,7 +15,6 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.logging.Logger;
@@ -26,11 +25,15 @@ import java.util.stream.Collectors;
  */
 public class Digger extends JavaPlugin implements Listener {
 
-    // === フィールド ===
+    // シングルトン
     private static Digger instance;
-    private final Logger logger = getLogger();
-    private final PluginManager pm = getServer().getPluginManager();
-    // データ
+    public static Digger getInstance() { return instance; }
+    private final PluginManager pm = Bukkit.getPluginManager();
+
+    // ロガー
+    private Logger logger;
+
+    // データ構造
     public final Map<UUID, PlayerData> diamondCount = new HashMap<>();
     private final Set<Location> placedBlocks = new HashSet<>();
     private final Map<Location, UUID> placedBlocksWithUUID = new HashMap<>();
@@ -40,27 +43,29 @@ public class Digger extends JavaPlugin implements Listener {
     private SQLiteDatabase sqLiteDatabase;
 
     // 更新間隔
-    private final long scoreboardUpdateInterval = 20L; // 1秒ごと
-
-    // === プラグイン初期化 ===
-    public Digger() {
-        instance = this;
-    }
-    public static Digger getInstance() {
-        return instance;
-    }
+    private final long scoreboardUpdateInterval = 20L;
 
     @Override
     public void onEnable() {
+        instance = this;
+        this.logger = getLogger();
+
         logger.info("プラグインを有効化します。");
         saveDefaultConfig();
         setupFiles();
-        setupDatabase();
+
+        if (!setupDatabaseSafe()) {
+            logger.severe("データベース初期化失敗のため、プラグインを無効化します。");
+            pm.disablePlugin(this);
+            return;
+        }
+
+        loadData();
+
         getCommand("reload").setExecutor(new Commands(this));
         getCommand("set").setExecutor(new Commands(this));
         pm.registerEvents(this, this);
 
-        // サイドバーの定期更新
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -69,54 +74,47 @@ public class Digger extends JavaPlugin implements Listener {
         }.runTaskTimer(this, 20L, scoreboardUpdateInterval);
     }
 
+    @Override
+    public void onDisable() {
+        logger.info("プラグインを無効化します。データを保存中…");
+        saveData();
+        saveConfig();
+    }
+
+    /** データベース初期化: 成功でtrue */
+    private boolean setupDatabaseSafe() {
+        String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
+        try {
+            if ("mysql".equals(dbType)) {
+                Properties prop = new Properties();
+                prop.load(new FileInputStream(new File(getDataFolder(), "config.properties")));
+                mySQLDatabase = new MySQLDatabase(prop);
+
+                if (!mySQLDatabase.isConnected()) {
+                    logger.severe("MySQL への接続に失敗しました。");
+                    return false;
+                }
+                logger.info("MySQL に正常に接続しました。");
+            } else {
+                sqLiteDatabase = SQLiteDatabase.Companion.getInstance();
+                sqLiteDatabase.openConnection(getDataFolder().getAbsolutePath());
+                logger.info("SQLite に正常に接続しました。");
+            }
+            return true;
+        } catch (Exception e) {
+            logger.severe("データベース初期化エラー: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /** リソース配置 */
     private void setupFiles() {
         saveResource("config.properties", false);
         saveResource("Database.db", false);
     }
 
-    // === データベース初期化 ===
-    private void setupDatabase() {
-        String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
-        if ("mysql".equals(dbType)) {
-            initMySQL();
-        } else {
-            initSQLite();
-        }
-    }
-
-    private void initMySQL() {
-        try {
-            Properties prop = new Properties();
-            prop.load(new FileInputStream(new File(getDataFolder(), "config.properties")));
-            mySQLDatabase = new MySQLDatabase(prop);
-
-            if (!mySQLDatabase.isConnected()) {
-                logger.severe("MySQL への接続に失敗しました。");
-            } else {
-                logger.info("MySQL に正常に接続しました。");
-            }
-        } catch (IOException e) {
-            logger.severe("config.properties の読み込みに失敗: " + e.getMessage());
-            pm.disablePlugin(this);
-        }
-    }
-
-    private void initSQLite() {
-        sqLiteDatabase = SQLiteDatabase.Companion.getInstance();
-        try {
-            if (!sqLiteDatabase.checkConnection()) {
-                sqLiteDatabase.openConnection(getDataFolder().getAbsolutePath());
-            }
-            logger.info("SQLite に正常に接続しました。");
-        } catch (SQLException e) {
-            logger.severe("SQLite の初期化に失敗: " + e.getMessage());
-            pm.disablePlugin(this);
-        }
-    }
-
     // === イベント登録 ===
-
-    // ダイヤ設置ブロック記録
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Material type = event.getBlockPlaced().getType();
@@ -125,7 +123,6 @@ public class Digger extends JavaPlugin implements Listener {
         }
     }
 
-    // ダイヤ破壊判定（自然生成のみカウント）
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
@@ -133,10 +130,8 @@ public class Digger extends JavaPlugin implements Listener {
         Material type = block.getType();
 
         if (type != Material.DIAMOND_ORE && type != Material.DEEPSLATE_DIAMOND_ORE) return;
+        if (placedBlocks.remove(block.getLocation())) return; // 設置ダイヤは無視
 
-        if (placedBlocks.remove(block.getLocation())) return; // 自分設置ならカウントしない
-
-        // カウントアップ
         incrementDiamondCount(player);
     }
 
@@ -147,30 +142,17 @@ public class Digger extends JavaPlugin implements Listener {
         diamondCount.put(id, data);
     }
 
-    // === スコアボード更新 ===
-
+    /** スコアボードの一括更新 */
     public void updateAllPlayersScoreboard() {
-        // Map<UUID, Integer> に変換
         Map<UUID, Integer> counts = diamondCount.entrySet().stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        e -> e.getValue().getDiamondMined()
-                ));
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getDiamondMined()));
         CoordinatesDisplay disp = new CoordinatesDisplay(this, counts);
         for (Player p : Bukkit.getOnlinePlayers()) {
             disp.updateScoreboard(p);
         }
     }
 
-    // === データ保存/ロード ===
-
-    @Override
-    public void onDisable() {
-        logger.info("プラグインを無効化します。データを保存中…");
-        saveData();
-        saveConfig();
-    }
-
+    /** データ読込 */
     public void loadData() {
         String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
         if ("mysql".equals(dbType)) {
@@ -192,6 +174,7 @@ public class Digger extends JavaPlugin implements Listener {
         }
     }
 
+    /** データ保存 */
     public void saveData() {
         String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
         if ("mysql".equals(dbType)) {
@@ -209,7 +192,7 @@ public class Digger extends JavaPlugin implements Listener {
         }
     }
 
-    // === 内部データ構造 ===
+    // === 内部データクラス ===
     public static class PlayerData {
         private final String playerName;
         private int diamondMined;

@@ -12,7 +12,7 @@ commands:
     permission: digger.reload
   set:
     description: 掘ったダイヤモンド数を強制的にセットします。
-    usage: /set <value>
+    usage: /set <player> <value>
     permission: digger.set
 permissions:
   digger.reload:

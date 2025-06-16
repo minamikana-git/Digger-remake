@@ -147,7 +147,7 @@ public class MySQLDatabase(prop: Properties) {
     // データベース接続が有効か確認
     fun isConnected(): Boolean {
         return try {
-            connection.use { conn -> conn.isValid(5) } // タイムアウト2秒
+            connection.use { conn -> conn.isValid(5) } // タイムアウト5秒
         } catch (e: SQLException) {
             Digger.getInstance().logger.severe("データベース接続の確認に失敗しました: ${e.message}")
             false
