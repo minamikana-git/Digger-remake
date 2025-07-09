@@ -1,4 +1,4 @@
-package net.hotamachisubaru.digger.sqlite
+package net.hotamachisubaru.digger.database
 
 import net.hotamachisubaru.digger.Digger
 import org.bukkit.Location
@@ -35,7 +35,7 @@ class SQLiteDatabase {
                     + "PRIMARY KEY (UUID));")
             statement.execute(playerDataTableCreationQuery)
 
-            // diamond_mined テーブルの作成（旧 placed_blocks テーブルをリネーム）
+            // diamond_mined テーブルの作成
             val diamondMinedTableCreationQuery = ("CREATE TABLE IF NOT EXISTS diamond_mined ("
                     + "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + "World VARCHAR(255),"
