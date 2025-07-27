@@ -21,8 +21,8 @@ public class CoordinatesDisplay {
         Scoreboard board = sm.getNewScoreboard();
 
         Objective obj = board.registerNewObjective(
-                " mine_board",
-                "dummy",
+                "mine_board",
+                Criteria.DUMMY,
                 "§bダイヤランキング"
         );
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);

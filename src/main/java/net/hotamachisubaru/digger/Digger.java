@@ -20,10 +20,15 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.concurrent.CompletableFuture;
 
 public class Digger extends JavaPlugin implements Listener {
     private static Digger instance;
-    public static Digger getInstance() { return instance; }
+
+    public static Digger getInstance() {
+        return instance;
+    }
+
     private final PluginManager pm = Bukkit.getPluginManager();
     public final Map<UUID, PlayerData> diamondCount = new HashMap<>();
     private final Set<Location> placedBlocks = new HashSet<>();
@@ -40,9 +45,10 @@ public class Digger extends JavaPlugin implements Listener {
         this.logger = getLogger();
         logger.info("プラグインを有効化します。");
         saveDefaultConfig();
-        setupDatabaseSafe();
         setupEconomy();
         setupFiles();
+
+        // ここで1回だけ
         if (!setupDatabaseSafe()) {
             logger.severe("データベース初期化失敗のため、プラグインを無効化します。");
             pm.disablePlugin(this);
@@ -53,13 +59,19 @@ public class Digger extends JavaPlugin implements Listener {
         getCommand("reload").setExecutor(commands);
         getCommand("set").setExecutor(commands);
         pm.registerEvents(this, this);
-        // Folia/Paper両対応: 全員分同期でスコアボード更新
-        Bukkit.getScheduler().runTaskTimer(this, () -> {
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                SchedulerUtil.runAtPlayer(p, this, () -> updateScoreboardSafe(p));
+        // Folia/Paper対応: 全員分非同期でスコアボード更新
+        CompletableFuture.runAsync(() -> {
+            while (Bukkit.getPluginManager().isPluginEnabled(this)) {
+                Bukkit.getOnlinePlayers().forEach(player -> SchedulerUtil.runAtPlayer(player, this, () -> updateScoreboardSafe(player)));
+                try {
+                    Thread.sleep(scoreboardUpdateInterval * 50); // Convert ticks to milliseconds
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
-        }, 20L, scoreboardUpdateInterval);
+        });
     }
+
 
     private boolean setupEconomy() {
         if (getServer().getPluginManager().getPlugin("Vault") == null) {
@@ -73,7 +85,7 @@ public class Digger extends JavaPlugin implements Listener {
         }
         economy = rsp.getProvider();
         if (economy == null) {
-          logger.warning("§4エラー：Economyサービスが見つかりません。");
+            logger.warning("§4エラー：Economyサービスが見つかりません。");
             return false;
         }
         return true;
@@ -89,27 +101,39 @@ public class Digger extends JavaPlugin implements Listener {
 
     private boolean setupDatabaseSafe() {
         String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
+        boolean initialized = false;
         try {
             if ("mysql".equals(dbType)) {
                 Properties prop = new Properties();
                 prop.load(new FileInputStream(new File(getDataFolder(), "config.properties")));
                 mySQLDatabase = new MySQLDatabase(prop);
-                if (!mySQLDatabase.isConnected()) {
-                    logger.severe("MySQL への接続に失敗しました。");
-                    return false;
+                if (mySQLDatabase.isConnected()) {
+                    logger.info("MySQL に正常に接続しました。");
+                    initialized = true;
+                } else {
+                    logger.severe("MySQL への接続に失敗しました。SQLiteに切り替えます。");
                 }
-                logger.info("MySQL に正常に接続しました。");
-            } else {
+            }
+        } catch (Exception e) {
+            logger.severe("MySQLデータベース初期化エラー: " + e.getMessage() + " SQLiteに切り替えます。");
+        }
+
+        // MySQL失敗時はSQLiteを必ず初期化
+        if (!initialized) {
+            try {
                 sqLiteDatabase = SQLiteDatabase.Companion.getInstance();
                 sqLiteDatabase.openConnection(getDataFolder().getAbsolutePath());
                 logger.info("SQLite に正常に接続しました。");
+                initialized = true;
+            } catch (Exception e) {
+                logger.severe("SQLiteデータベース初期化エラー: " + e.getMessage());
+                sqLiteDatabase = null;
+                initialized = false;
             }
-            return true;
-        } catch (Exception e) {
-            logger.severe("データベース初期化エラー: " + e.getMessage());
-            return false;
         }
+        return initialized;
     }
+
 
     private void setupFiles() {
         saveResource("config.properties", false);
@@ -150,17 +174,59 @@ public class Digger extends JavaPlugin implements Listener {
         CoordinatesDisplay disp = new CoordinatesDisplay(this, counts);
         disp.updateScoreboard(player);
     }
+    public void saveData() {
+        String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
+        boolean success = false;
+
+        // MySQL優先
+        if ("mysql".equals(dbType) && mySQLDatabase != null) {
+            try {
+                if (mySQLDatabase.isConnected()) {
+                    mySQLDatabase.saveData(diamondCount, new ArrayList<>(placedBlocks), placedBlocksWithUUID);
+                    logger.info("MySQL に保存完了。");
+                    success = true;
+                } else {
+                    logger.warning("MySQL 接続が確立されていません。SQLiteに切り替えます。");
+                }
+            } catch (Exception e) {
+                logger.severe("MySQL 保存エラー: " + e.getMessage() + "。SQLiteに切り替えます。");
+            }
+        }
+
+        // SQLite (null安全も兼ねる)
+        if (!success && sqLiteDatabase != null) {
+            try {
+                sqLiteDatabase.saveData(diamondCount, new ArrayList<>(placedBlocks));
+                logger.info("SQLite に保存完了。");
+            } catch (SQLException e) {
+                logger.severe("SQLite 保存エラー: " + e.getMessage());
+            }
+        } else if (!success) {
+            logger.severe("どのデータベースにも保存できませんでした。");
+        }
+    }
 
     public void loadData() {
         String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
-        if ("mysql".equals(dbType)) {
-            if (mySQLDatabase.isConnected()) {
-                Map<UUID, PlayerData> data = mySQLDatabase.loadData();
-                diamondCount.clear();
-                diamondCount.putAll(data);
-                logger.info("MySQL から読み込み完了。");
+        boolean loaded = false;
+
+        if ("mysql".equals(dbType) && mySQLDatabase != null) {
+            try {
+                if (mySQLDatabase.isConnected()) {
+                    Map<UUID, PlayerData> data = mySQLDatabase.loadData();
+                    diamondCount.clear();
+                    diamondCount.putAll(data);
+                    logger.info("MySQL から読み込み完了。");
+                    loaded = true;
+                } else {
+                    logger.warning("MySQL 接続が確立されていません。SQLiteから読み込みを試みます。");
+                }
+            } catch (Exception e) {
+                logger.severe("MySQL 読み込みエラー: " + e.getMessage() + "。SQLiteから読み込みを試みます。");
             }
-        } else {
+        }
+
+        if (!loaded && sqLiteDatabase != null) {
             try {
                 Map<UUID, PlayerData> data = sqLiteDatabase.getData();
                 diamondCount.clear();
@@ -169,23 +235,8 @@ public class Digger extends JavaPlugin implements Listener {
             } catch (SQLException e) {
                 logger.severe("SQLite 読み込みエラー: " + e.getMessage());
             }
-        }
-    }
-
-    public void saveData() {
-        String dbType = getConfig().getString("database.type", "sqlite").toLowerCase();
-        if ("mysql".equals(dbType)) {
-            if (mySQLDatabase.isConnected()) {
-                mySQLDatabase.saveData(diamondCount, new ArrayList<>(placedBlocks), placedBlocksWithUUID);
-                logger.info("MySQL に保存完了。");
-            }
-        } else {
-            try {
-                sqLiteDatabase.saveData(diamondCount, new ArrayList<>(placedBlocks));
-                logger.info("SQLite に保存完了。");
-            } catch (SQLException e) {
-                logger.severe("SQLite 保存エラー: " + e.getMessage());
-            }
+        } else if (!loaded) {
+            logger.severe("どのデータベースからも読み込みできませんでした。");
         }
     }
 
@@ -197,8 +248,17 @@ public class Digger extends JavaPlugin implements Listener {
             this.playerName = playerName;
             this.diamondMined = diamondMined;
         }
-        public String getPlayerName() { return playerName; }
-        public int getDiamondMined() { return diamondMined; }
-        public void setDiamondMined(int v) { this.diamondMined = v; }
+
+        public String getPlayerName() {
+            return playerName;
+        }
+
+        public int getDiamondMined() {
+            return diamondMined;
+        }
+
+        public void setDiamondMined(int v) {
+            this.diamondMined = v;
+        }
     }
 }
